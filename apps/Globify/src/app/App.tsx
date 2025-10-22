@@ -565,14 +565,14 @@ export const App = () => {
                     styles.marginBottomMd,
                   ]}
                 >
-                  nx g @nx/react-native:lib ui
+                  nx g @nx/expo:lib ui
                 </Text>
                 <Text style={[styles.textXS, styles.monospace, styles.comment]}>
                   # Add a component
                 </Text>
                 <Text style={[styles.textXS, styles.monospace]}>nx g \</Text>
                 <Text style={[styles.textXS, styles.monospace]}>
-                  @nx/react-native:component \
+                  @nx/react:component \
                 </Text>
                 <Text style={[styles.textXS, styles.monospace]}>
                   ui/src/lib/button
