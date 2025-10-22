@@ -1,5 +1,6 @@
-const { withNxMetro } = require('@nx/react-native');
-const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
+const { withNxMetro } = require('@nx/expo');
+const { getDefaultConfig } = require('@expo/metro-config');
+const { mergeConfig } = require('metro-config');
 
 const defaultConfig = getDefaultConfig(__dirname);
 const { assetExts, sourceExts } = defaultConfig.resolver;
@@ -11,7 +12,7 @@ const { assetExts, sourceExts } = defaultConfig.resolver;
  * @type {import('metro-config').MetroConfig}
  */
 const customConfig = {
-  cacheVersion: '@jw-dev/Globify',
+  cacheVersion: 'Globify',
   transformer: {
     babelTransformerPath: require.resolve('react-native-svg-transformer'),
   },

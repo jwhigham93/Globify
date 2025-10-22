@@ -1,22 +1,21 @@
 module.exports = {
-  displayName: '@jw-dev/Globify',
-  preset: 'react-native',
-  resolver: '@nx/jest/plugins/resolver',
+  displayName: 'Globify',
+  resolver: require.resolve('./jest.resolver.js'),
+  preset: 'jest-expo',
   moduleFileExtensions: ['ts', 'js', 'html', 'tsx', 'jsx'],
   setupFilesAfterEnv: ['<rootDir>/src/test-setup.ts'],
   moduleNameMapper: {
-    '\\.svg$': '@nx/react-native/plugins/jest/svg-mock',
+    '\\.svg$': '@nx/expo/plugins/jest/svg-mock',
   },
   transform: {
-    '^.+.(js|ts|tsx)$': [
+    '\\.[jt]sx?$': [
       'babel-jest',
       {
         configFile: __dirname + '/.babelrc.js',
       },
     ],
-    '^.+.(bmp|gif|jpg|jpeg|mp4|png|psd|svg|webp)$': require.resolve(
-      'react-native/jest/assetFileTransformer.js'
-    ),
+    '^.+\\.(bmp|gif|jpg|jpeg|mp4|png|psd|svg|webp|ttf|otf|m4v|mov|mp4|mpeg|mpg|webm|aac|aiff|caf|m4a|mp3|wav|html|pdf|obj)$':
+      require.resolve('jest-expo/src/preset/assetFileTransformer.js'),
   },
   coverageDirectory: '../../coverage/apps/Globify',
 };
