@@ -1,0 +1,10 @@
+{
+  "name": "@jw-dev/Globify-e2e",
+  "version": "0.0.1",
+  "private": true,
+  "nx": {
+    "implicitDependencies": [
+      "@jw-dev/Globify"
+    ]
+  }
+}
