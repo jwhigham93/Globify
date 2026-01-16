@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>3D Globe Visualization</title>
+  <script src="https://unpkg.com/react-globe.gl@2.26.0/dist/react-globe.gl.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #000000;
+      width: 100vw;
+      height: 100vh;
+    }
+    
+    #globeViz {
+      width: 100vw;
+      height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <div id="globeViz"></div>
+
+  <script>
+    // Initialize globe with react-globe.gl
+    const globe = Globe()
+      (document.getElementById('globeViz'))
+      .backgroundColor('#000000')
+      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+      .pointsData([])
+      .pointAltitude(0.01)
+      .pointRadius(0.5)
+      .pointColor('orange');
+
+    // Message handler for React Native → WebView communication
+    window.handleRNMessage = (message) => {
+      try {
+        const { type, payload } = message;
+
+        switch (type) {
+          case 'UPDATE_DATA':
+            // Update data points on globe
+            globe.pointsData(payload || []);
+            break;
+
+          case 'SET_ROTATION':
+            // Set globe rotation
+            if (payload && globe.scene()) {
+              globe.scene().rotation.set(
+                payload.x || 0,
+                payload.y || 0,
+                payload.z || 0
+              );
+            }
+            break;
+
+          case 'RESET_VIEW':
+            // Reset globe to default view
+            if (globe.scene() && globe.camera()) {
+              globe.scene().rotation.set(0, 0, 0);
+              globe.camera().position.set(0, 0, 300);
+            }
+            break;
+
+          default:
+            console.warn('Unknown RN message type:', type);
+        }
+      } catch (error) {
+        sendErrorToRN(error);
+      }
+    };
+
+    // Send message to React Native
+    const sendToRN = (type, payload) => {
+      try {
+        const message = JSON.stringify({
+          type,
+          payload,
+          timestamp: Date.now(),
+        });
+        
+        // Check if running in React Native WebView
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(message);
+        } else {
+          console.log('[WebView Bridge]', type, payload);
+        }
+      } catch (error) {
+        console.error('Failed to send message to RN:', error);
+      }
+    };
+
+    // Send error to React Native
+    const sendErrorToRN = (error) => {
+      sendToRN('ERROR', {
+        message: error.message || 'Unknown error',
+        stack: error.stack,
+        code: 'WEBGL_ERROR',
+      });
+    };
+
+    // Send READY message after globe initializes
+    globe.onGlobeReady(() => {
+      sendToRN('READY', {
+        version: '1.0.0',
+        globeVersion: '2.26.0',
+      });
+    });
+
+    // Send STATE_UPDATE periodically (every 1 second)
+    setInterval(() => {
+      if (globe.scene() && globe.camera()) {
+        const rotation = globe.scene().rotation;
+        const camera = globe.camera();
+        
+        sendToRN('STATE_UPDATE', {
+          rotation: {
+            x: rotation.x,
+            y: rotation.y,
+            z: rotation.z,
+          },
+          zoom: 1.0, // TODO: Calculate from camera distance
+          cameraPosition: {
+            x: camera.position.x,
+            y: camera.position.y,
+            z: camera.position.z,
+          },
+        });
+      }
+    }, 1000);
+
+    // Handle point clicks
+    globe.onPointClick((point, event, coords) => {
+      const dataPoints = globe.pointsData();
+      const index = dataPoints.findIndex(p => p === point);
+      
+      sendToRN('POINT_CLICKED', {
+        point: point,
+        index: index,
+      });
+    });
+
+    // Global error handler
+    window.addEventListener('error', (event) => {
+      sendErrorToRN(event.error || new Error(event.message));
+    });
+
+    // Unhandled promise rejection handler
+    window.addEventListener('unhandledrejection', (event) => {
+      sendErrorToRN(event.reason || new Error('Unhandled promise rejection'));
+    });
+
+    console.log('Globe WebView initialized');
+  </script>
+</body>
+</html>

@@ -2,6 +2,7 @@
   "name": "@jw-dev/Globify",
   "version": "0.0.1",
   "private": true,
+  "main": "./index.js",
   "scripts": {
     "eas-build-post-install": "cd ../../ && node tools/scripts/eas-build-post-install.mjs . apps/Globify"
   },
@@ -9,12 +10,15 @@
     "name": "Globify"
   },
   "dependencies": {
-    "@expo/metro-config": "*",
+    "@expo/metro-config": "~54.0.12",
+    "@react-three/fiber": "^9.5.0",
     "@testing-library/react-native": "*",
-    "expo": "*",
+    "expo": "~54.0.31",
+    "expo-gl": "~16.0.9",
     "expo-splash-screen": "*",
     "expo-status-bar": "*",
     "expo-system-ui": "*",
+    "globe.gl": "^2.44.1",
     "jest-expo": "*",
     "metro-config": "*",
     "metro-resolver": "*",
@@ -22,6 +26,11 @@
     "react-native": "*",
     "react-native-svg": "*",
     "react-native-svg-transformer": "*",
-    "react-native-web": "*"
+    "react-native-web": "*",
+    "three": "^0.180.0",
+    "three-globe": "^2.45.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.182.0"
   }
 }

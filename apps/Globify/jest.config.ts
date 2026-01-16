@@ -1,6 +1,6 @@
 module.exports = {
   displayName: 'Globify',
-  resolver: require.resolve('./jest.resolver.js'),
+
   preset: 'jest-expo',
   moduleFileExtensions: ['ts', 'js', 'html', 'tsx', 'jsx'],
   setupFilesAfterEnv: ['<rootDir>/src/test-setup.ts'],
