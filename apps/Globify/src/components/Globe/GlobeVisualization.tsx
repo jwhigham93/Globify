@@ -12,7 +12,42 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as THREE from 'three';
 import ThreeGlobe from 'three-globe';
+import { Asset } from 'expo-asset';
 import type { GlobeVisualizationProps, DataPoint } from './types';
+
+// Local texture assets - bundled with the app for reliability
+// Earth textures sourced from NASA Earth Observatory Black Marble project
+// https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/
+const TEXTURE_ASSETS = {
+  // NASA Black Marble 2016 - High resolution city lights (13500x6750, 3km)
+  // Source: https://eoimages.gsfc.nasa.gov/images/imagerecords/144000/144898/
+  earthNightHires: require('../../../assets/textures/earth-night-2016-3km.jpg'),
+  // NASA Black Marble 2016 - Medium resolution (3600x1800) - lighter weight option
+  earthNightMedium: require('../../../assets/textures/earth-night-2016-hires.jpg'),
+  // NASA Blue Marble - daytime Earth with clouds
+  earthBlueMarble: require('../../../assets/textures/earth-blue-marble.jpg'),
+  // Original three-globe textures (fallback)
+  earthNightLights: require('../../../assets/textures/earth-night-lights.jpg'),
+  earthDark: require('../../../assets/textures/earth-dark.jpg'),
+  // Topology/bump map for terrain detail
+  earthTopology: require('../../../assets/textures/earth-topology.png'),
+  // Starry background
+  nightSky: require('../../../assets/textures/night-sky.png'),
+};
+
+/**
+ * Helper to resolve asset URI for both web and native platforms
+ * On web, require() returns the URL string directly
+ * On native, require() returns a module ID that needs expo-asset to resolve
+ */
+const resolveAssetUri = (asset: string | number): string => {
+  // On web, Metro returns the URL string directly from require()
+  if (typeof asset === 'string') {
+    return asset;
+  }
+  // On native, we need to use expo-asset to resolve the module ID
+  return Asset.fromModule(asset).uri;
+};
 
 /**
  * Loading fallback component
@@ -64,10 +99,11 @@ const StarryBackground: React.FC = () => {
     // Set a dark background color as fallback
     scene.background = new THREE.Color(0x000011);
 
-    // Load the star texture
+    // Load the star texture from local assets
+    const textureUri = resolveAssetUri(TEXTURE_ASSETS.nightSky);
     const loader = new THREE.TextureLoader();
     loader.load(
-      'https://cdn.jsdelivr.net/npm/three-globe/example/img/night-sky.png',
+      textureUri,
       (loadedTexture) => {
         setTexture(loadedTexture);
       },
@@ -126,14 +162,14 @@ const GlobeScene: React.FC<GlobeSceneProps> = ({ dataPoints, onReady, onError })
     
     try {
       // Create globe instance matching submarine cables example style
-      // Using earth-dark texture with topology bump map
+      // Using NASA Black Marble 2016 high-resolution texture (13500x6750)
+      // Source: https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/
+      const earthTextureUri = resolveAssetUri(TEXTURE_ASSETS.earthNightHires);
+      const earthTopologyUri = resolveAssetUri(TEXTURE_ASSETS.earthTopology);
+      
       const globe = new ThreeGlobe({ animateIn: false })
-        .globeImageUrl(
-          'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-dark.jpg'
-        )
-        .bumpImageUrl(
-          'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-topology.png'
-        )
+        .globeImageUrl(earthTextureUri)
+        .bumpImageUrl(earthTopologyUri)
         .showAtmosphere(true)
         .atmosphereColor('#ffffff')
         .atmosphereAltitude(0.20)
