@@ -135,12 +135,12 @@ const GlobeScene: React.FC<GlobeSceneProps> = ({ dataPoints, onReady, onError })
           'https://cdn.jsdelivr.net/npm/three-globe/example/img/earth-topology.png'
         )
         .showAtmosphere(true)
-        .atmosphereColor('#3a82f7')
-        .atmosphereAltitude(0.15)
+        .atmosphereColor('#ffffff')
+        .atmosphereAltitude(0.20)
         // Use points/bars for visualization
         .pointsData(dataPoints)
         .pointAltitude((d) => ((d as DataPoint).value || 50) / 100) // Height based on value (0-1)
-        .pointRadius(0.5)
+        .pointRadius(0.25)
         .pointColor(() => SPOTIFY_GREEN);
 
       console.log('Globe created:', globe);

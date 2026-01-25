@@ -4,30 +4,7 @@
   getModuleExportPromiseByUrl: jest.fn(),
 };
 
-// Mock react-native-webview
-jest.mock('react-native-webview', () => {
-  const React = require('react');
-
-  return {
-    __esModule: true,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    default: React.forwardRef((props: any, ref: any) => {
-      const mockRef = {
-        injectJavaScript: jest.fn(),
-      };
-
-      // Expose mock ref for testing
-      React.useImperativeHandle(ref, () => mockRef);
-
-      const { View } = require('react-native');
-      return React.createElement(View, {
-        ...props,
-        testID: props.testID,
-      });
-    }),
-  };
-});
-
+// Polyfill for structuredClone
 if (typeof global.structuredClone === 'undefined') {
   global.structuredClone = (object) => JSON.parse(JSON.stringify(object));
 }

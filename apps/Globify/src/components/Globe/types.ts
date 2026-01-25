@@ -80,34 +80,11 @@ export interface GlobeState {
 }
 
 /**
- * Message types sent FROM React Native TO WebView.
- */
-export type RNToWebViewMessage =
-  | { type: 'UPDATE_DATA'; payload: DataPoint[] }
-  | { type: 'SET_ROTATION'; payload: { x: number; y: number; z: number } }
-  | { type: 'RESET_VIEW' };
-
-/**
- * Message types sent FROM WebView TO React Native.
- */
-export type WebViewToRNMessage =
-  | { type: 'READY'; payload: { version: string; globeVersion: string } }
-  | { type: 'STATE_UPDATE'; payload: GlobeState }
-  | { type: 'ERROR'; payload: { message: string; stack?: string; code?: string } }
-  | { type: 'POINT_CLICKED'; payload: { point: DataPoint; index: number } };
-
-/**
- * Union of all message types for type-safe bridge communication.
- */
-export type WebViewBridgeMessage = RNToWebViewMessage | WebViewToRNMessage;
-
-/**
  * Props for the GlobeVisualization component.
  */
 export interface GlobeVisualizationProps {
   /**
    * Array of data points to display on the globe.
-   * Updates are sent to WebView via bridge.
    */
   dataPoints?: DataPoint[];
 
@@ -117,19 +94,19 @@ export interface GlobeVisualizationProps {
   onPointClick?: (point: DataPoint, index: number) => void;
 
   /**
-   * Callback invoked when WebView is ready.
+   * Callback invoked when globe is ready.
    * Useful for triggering initial data load.
    */
   onReady?: () => void;
 
   /**
-   * Callback invoked when WebView encounters an error.
+   * Callback invoked when globe encounters an error.
    */
   onError?: (error: Error) => void;
 
   /**
    * Optional callback invoked when globe state updates.
-   * Receives current rotation/zoom state from WebView.
+   * Receives current rotation/zoom state.
    * Useful for debugging or analytics.
    */
   onStateChange?: (state: GlobeState) => void;
