@@ -4,6 +4,70 @@
  */
 
 /**
+ * Location types in the supply chain
+ */
+export type LocationType = 'supplier' | 'dc' | 'restaurant';
+
+/**
+ * Route types connecting locations
+ */
+export type RouteType = 'supplier_to_dc' | 'dc_to_restaurant';
+
+/**
+ * A location in the supply chain (supplier, DC, or restaurant)
+ */
+export interface Location {
+  /** Unique identifier */
+  id: string;
+  /** Display name */
+  name: string;
+  /** Latitude in decimal degrees (-90 to +90) */
+  lat: number;
+  /** Longitude in decimal degrees (-180 to +180) */
+  lng: number;
+  /** Type of location */
+  type: LocationType;
+}
+
+/**
+ * A supply route connecting two locations
+ */
+export interface SupplyRoute {
+  /** Unique identifier */
+  id: string;
+  /** Source location ID */
+  sourceId: string;
+  /** Destination location ID */
+  destId: string;
+  /** Type of route */
+  routeType: RouteType;
+  /** Volume of goods (units per week) */
+  volume: number;
+  /** Whether route is currently active */
+  isActive: boolean;
+}
+
+/**
+ * Arc visualization data for three-globe
+ */
+export interface ArcData {
+  /** Start latitude */
+  startLat: number;
+  /** Start longitude */
+  startLng: number;
+  /** End latitude */
+  endLat: number;
+  /** End longitude */
+  endLng: number;
+  /** Gradient color array [startColor, endColor] */
+  color: [string, string];
+  /** Arc stroke width (volume-based) */
+  strokeWidth: number;
+  /** Label for hover/tap tooltip */
+  label: string;
+}
+
+/**
  * A data point visualized on the 3D globe.
  * Matches react-globe.gl's expected format for pointsData.
  */
@@ -87,6 +151,11 @@ export interface GlobeVisualizationProps {
    * Array of data points to display on the globe.
    */
   dataPoints?: DataPoint[];
+
+  /**
+   * Array of arc data for supply chain visualization.
+   */
+  arcsData?: ArcData[];
 
   /**
    * Callback invoked when a data point is clicked/tapped.

@@ -6,8 +6,11 @@ import {
   Platform,
 } from 'react-native';
 import { GlobeVisualization } from '../components/Globe/GlobeVisualization';
-import { SAMPLE_DATA_POINTS } from '../services/sampleData';
+import { getSupplyChainVisualizationData } from '../services/supplyChainData';
 import { DEFAULT_BACKGROUND_COLOR } from '../components/Globe';
+
+// Get supply chain visualization data
+const { arcs, points } = getSupplyChainVisualizationData();
 
 export const App = () => {
   // On web, use a div container for proper iframe rendering
@@ -15,7 +18,8 @@ export const App = () => {
     return (
       <div style={{ width: '100vw', height: '100vh', backgroundColor: DEFAULT_BACKGROUND_COLOR }}>
         <GlobeVisualization 
-          dataPoints={SAMPLE_DATA_POINTS}
+          dataPoints={points}
+          arcsData={arcs}
           testID="globe-visualization"
         />
       </div>
@@ -28,7 +32,8 @@ export const App = () => {
       <StatusBar barStyle="dark-content" />
       <SafeAreaView style={styles.container}>
         <GlobeVisualization 
-          dataPoints={SAMPLE_DATA_POINTS}
+          dataPoints={points}
+          arcsData={arcs}
           testID="globe-visualization"
         />
       </SafeAreaView>

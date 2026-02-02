@@ -21,6 +21,7 @@ import { GlobeScene } from './GlobeScene';
  */
 export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   dataPoints = [],
+  arcsData = [],
   onPointClick,
   onReady,
   onError,
@@ -79,7 +80,8 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
           style={styles.canvas}
         >
           <GlobeScene 
-            dataPoints={dataPoints} 
+            dataPoints={dataPoints}
+            arcsData={arcsData}
             onReady={onReady} 
             onError={handleError}
             onTextureLoading={handleTextureLoading}
