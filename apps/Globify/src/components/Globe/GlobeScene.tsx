@@ -33,8 +33,6 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
 
   // Initialize globe once on mount - separate from data updates
   useEffect(() => {
-    console.log('GlobeScene mount - initializing globe');
-    
     // Signal that texture loading has started
     onTextureLoading?.(true);
     
@@ -63,16 +61,12 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         .pointColor(() => MEDIUM_CANDY_APPLE_RED)
         // Callback when globe texture finishes loading
         .onGlobeReady(() => {
-          console.log('Globe texture loaded');
           onTextureLoading?.(false);
         });
 
-      console.log('Globe created:', globe);
       globeRef.current = globe;
       scene.add(globe);
       setIsInitialized(true);
-
-      console.log('three-globe initialized with points (R3F unified)');
       onReady?.();
     } catch (error) {
       console.error('Error initializing globe:', error);
@@ -80,7 +74,6 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     }
 
     return () => {
-      console.log('GlobeScene unmount - cleaning up');
       if (globeRef.current) {
         scene.remove(globeRef.current);
         globeRef.current = null;
@@ -93,7 +86,6 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   // Update data points when they change (separate from initialization)
   useEffect(() => {
     if (globeRef.current && isInitialized && dataPoints.length > 0) {
-      console.log('Updating globe data points:', dataPoints.length);
       globeRef.current.pointsData(dataPoints);
     }
   }, [dataPoints, isInitialized]);

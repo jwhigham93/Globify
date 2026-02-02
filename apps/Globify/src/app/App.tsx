@@ -7,16 +7,15 @@ import {
 } from 'react-native';
 import { GlobeVisualization } from '../components/Globe/GlobeVisualization';
 import { SAMPLE_DATA_POINTS } from '../services/sampleData';
+import { DEFAULT_BACKGROUND_COLOR } from '../components/Globe';
 
 export const App = () => {
   // On web, use a div container for proper iframe rendering
   if (Platform.OS === 'web') {
     return (
-      <div style={{ width: '100vw', height: '100vh', backgroundColor: '#000000' }}>
+      <div style={{ width: '100vw', height: '100vh', backgroundColor: DEFAULT_BACKGROUND_COLOR }}>
         <GlobeVisualization 
           dataPoints={SAMPLE_DATA_POINTS}
-          onReady={() => console.log('Globe ready')}
-          onError={(error) => console.error('Globe error:', error)}
           testID="globe-visualization"
         />
       </div>
@@ -30,8 +29,6 @@ export const App = () => {
       <SafeAreaView style={styles.container}>
         <GlobeVisualization 
           dataPoints={SAMPLE_DATA_POINTS}
-          onReady={() => console.log('Globe ready')}
-          onError={(error) => console.error('Globe error:', error)}
           testID="globe-visualization"
         />
       </SafeAreaView>
@@ -42,7 +39,7 @@ export const App = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: DEFAULT_BACKGROUND_COLOR,
   },
 });
 
