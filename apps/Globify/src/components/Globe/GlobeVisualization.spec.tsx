@@ -14,7 +14,8 @@ jest.mock('@react-three/fiber', () => ({
   useFrame: jest.fn(),
   useThree: jest.fn(() => ({
     camera: { position: { set: jest.fn() } },
-    gl: { domElement: {} },
+    gl: { domElement: { addEventListener: jest.fn(), removeEventListener: jest.fn(), getBoundingClientRect: jest.fn(() => ({ left: 0, top: 0, width: 100, height: 100 })) } },
+    scene: { background: null, add: jest.fn(), remove: jest.fn() },
   })),
 }));
 
@@ -26,6 +27,25 @@ jest.mock('three-globe', () => {
     showAtmosphere: jest.fn().mockReturnThis(),
     atmosphereColor: jest.fn().mockReturnThis(),
     atmosphereAltitude: jest.fn().mockReturnThis(),
+    objectsData: jest.fn().mockReturnThis(),
+    objectThreeObject: jest.fn().mockReturnThis(),
+    objectLabel: jest.fn().mockReturnThis(),
+    objectLat: jest.fn().mockReturnThis(),
+    objectLng: jest.fn().mockReturnThis(),
+    objectAltitude: jest.fn().mockReturnThis(),
+    arcsData: jest.fn().mockReturnThis(),
+    arcStartLat: jest.fn().mockReturnThis(),
+    arcStartLng: jest.fn().mockReturnThis(),
+    arcEndLat: jest.fn().mockReturnThis(),
+    arcEndLng: jest.fn().mockReturnThis(),
+    arcColor: jest.fn().mockReturnThis(),
+    arcAltitude: jest.fn().mockReturnThis(),
+    arcStroke: jest.fn().mockReturnThis(),
+    arcDashLength: jest.fn().mockReturnThis(),
+    arcDashGap: jest.fn().mockReturnThis(),
+    arcDashAnimateTime: jest.fn().mockReturnThis(),
+    arcAltitudeAutoScale: jest.fn().mockReturnThis(),
+    onGlobeReady: jest.fn().mockReturnThis(),
     pointsData: jest.fn().mockReturnThis(),
     pointAltitude: jest.fn().mockReturnThis(),
     pointRadius: jest.fn().mockReturnThis(),
@@ -37,10 +57,7 @@ jest.mock('three-globe', () => {
 jest.mock('three', () => ({
   ...jest.requireActual('three'),
   TextureLoader: jest.fn().mockImplementation(() => ({
-    load: jest.fn((url, callback) => {
-      if (callback) callback({});
-      return {};
-    }),
+    load: jest.fn(() => ({})),
   })),
 }));
 
@@ -65,7 +82,10 @@ describe('GlobeVisualization Component', () => {
     it('should apply default background color when not provided', () => {
       const { getByTestId } = render(<GlobeVisualization testID="test-globe" />);
       const container = getByTestId('test-globe');
-      expect(container.props.style).toMatchObject(
+      const styles = Array.isArray(container.props.style)
+        ? Object.assign({}, ...container.props.style)
+        : container.props.style;
+      expect(styles).toMatchObject(
         expect.objectContaining({
           backgroundColor: '#000000',
         })
@@ -77,7 +97,10 @@ describe('GlobeVisualization Component', () => {
         <GlobeVisualization testID="test-globe" backgroundColor="#FF0000" />
       );
       const container = getByTestId('test-globe');
-      expect(container.props.style).toMatchObject(
+      const styles = Array.isArray(container.props.style)
+        ? Object.assign({}, ...container.props.style)
+        : container.props.style;
+      expect(styles).toMatchObject(
         expect.objectContaining({
           backgroundColor: '#FF0000',
         })

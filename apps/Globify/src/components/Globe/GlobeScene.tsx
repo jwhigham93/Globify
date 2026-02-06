@@ -20,8 +20,8 @@ import {
   MARKER_DC_SIZE,
   MARKER_RESTAURANT_RADIUS,
   MARKER_EMISSIVE_INTENSITY,
-  MARKER_ALTITUDE,
 } from './constants';
+import { buildAltitudeMap } from '../../services/collisionDetection';
 import { StarryBackground } from './StarryBackground';
 import { Controls } from './Controls';
 
@@ -33,6 +33,7 @@ export interface GlobeSceneProps {
   onTextureLoading?: (isLoading: boolean) => void;
   isStarsSpinning?: boolean;
   onPointClick?: (point: DataPoint) => void;
+  onZoomChange?: (distance: number) => void;
 }
 
 /**
@@ -87,6 +88,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   onTextureLoading, 
   isStarsSpinning = true,
   onPointClick,
+  onZoomChange,
 }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globeRef = useRef<any>(null);
@@ -105,6 +107,9 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     }
     
     try {
+      // Pre-compute collision-aware altitude offsets
+      const altitudeMap = buildAltitudeMap(dataPoints);
+      
       // Create globe instance matching submarine cables example style
       // Using NASA Black Marble 2016 high-resolution texture (13500x6750)
       // Options: earthNightHighRes (high-res), earthNightMediumRes (lighter weight)
@@ -120,7 +125,10 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         .objectsData(dataPoints)
         .objectLat((d) => (d as DataPoint).lat)
         .objectLng((d) => (d as DataPoint).lng)
-        .objectAltitude(MARKER_ALTITUDE)
+        .objectAltitude((d) => {
+          const point = d as DataPoint;
+          return altitudeMap.get(point.id || '') || 0;
+        })
         .objectThreeObject((d) => createLocationMarker(d as DataPoint))
         // Arc configuration for supply chain visualization
         .arcsData(arcsData)
@@ -164,7 +172,14 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   // Update data points when they change (separate from initialization)
   useEffect(() => {
     if (globeRef.current && isInitialized && dataPoints.length > 0) {
-      globeRef.current.objectsData(dataPoints);
+      // Recompute collision altitudes for the updated data set
+      const altitudeMap = buildAltitudeMap(dataPoints);
+      globeRef.current
+        .objectAltitude((d: object) => {
+          const point = d as DataPoint;
+          return altitudeMap.get(point.id || '') || 0;
+        })
+        .objectsData(dataPoints);
     }
   }, [dataPoints, isInitialized]);
 
@@ -248,7 +263,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       {/* Match globe.gl default lighting: 0.6 * Math.PI ≈ 1.88 intensity */}
       <ambientLight color={0xcccccc} intensity={2.6 * Math.PI} />
       <directionalLight position={[-2, 2, 0]} intensity={1.6 * Math.PI} />
-      <Controls />
+      <Controls onZoomChange={onZoomChange} />
     </>
   );
 };

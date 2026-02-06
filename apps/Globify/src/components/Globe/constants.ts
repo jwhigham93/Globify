@@ -37,9 +37,9 @@ export const ATMOSPHERE_ALTITUDE = 0.20;
 export const POINT_RADIUS = 0.25;
 
 // Concentration risk color gradient
-export const RISK_COLOR_LOW = '#00CC00';     // Green - low risk
+export const RISK_COLOR_LOW = '#22AA44';     // Green - low risk
 export const RISK_COLOR_MEDIUM = '#CCCC00';  // Yellow - medium risk
-export const RISK_COLOR_HIGH = '#CC0000';     // Red - high risk
+export const RISK_COLOR_HIGH = '#CC2222';     // Red - high risk
 export const RISK_THRESHOLD_LOW = 20;         // Below this = low risk
 export const RISK_THRESHOLD_HIGH = 35;        // Above this = high risk
 
@@ -50,7 +50,7 @@ export const DISRUPTION_BASE_ARC_COLOR: [string, string] = ['#22AA44', '#22AA44'
 // Impact state — red = damage
 export const DISABLED_NODE_COLOR = '#CC2222';                                       // Red (powered down / damaged)
 export const DISRUPTED_ARC_COLOR: [string, string] = ['#CC2222', '#CC2222'];        // Red for broken supply chains
-export const ORPHAN_HIGHLIGHT_COLOR = '#FF4444';                                    // Bright red for orphaned restaurants
+export const ORPHAN_HIGHLIGHT_COLOR = '#CC2222';                                    // Bright red for orphaned restaurants
 // Partial supply state — orange = reduced capacity
 export const PARTIAL_SUPPLY_NODE_COLOR = '#EE8800';                                 // Orange (still served, reduced capacity)
 export const PARTIAL_SUPPLY_ARC_COLOR: [string, string] = ['#EE8800', '#EE8800'];   // Orange for degraded supply arcs
@@ -59,15 +59,22 @@ export const PARTIAL_SUPPLY_ARC_COLOR: [string, string] = ['#EE8800', '#EE8800']
 export const MARKER_SUPPLIER_RADIUS = 0.28;
 export const MARKER_SUPPLIER_HEIGHT = 1.0;
 export const MARKER_DC_SIZE = 0.45;
-export const MARKER_RESTAURANT_RADIUS = 0.18;
+export const MARKER_RESTAURANT_RADIUS = 0.09;
 export const MARKER_EMISSIVE_INTENSITY = 1.2;
-export const MARKER_ALTITUDE = 0;  // Flush with globe surface
 
-// Camera settings
-export const CAMERA_POSITION: [number, number, number] = [0, 0, 300];
+// Marker altitudes are computed dynamically via collisionDetection.ts
+// Only markers near other markers get raised — see buildAltitudeMap()
+
+// Camera settings — positioned to face continental USA (lon ≈ -95°, slight north elevation)
+export const CAMERA_POSITION: [number, number, number] = [-196, 105, -17];
 export const CAMERA_FOV = 75;
 export const CAMERA_NEAR = 1;
 export const CAMERA_FAR = 50000;
+
+// Zoom limits (camera distance from origin)
+export const ZOOM_MIN_DISTANCE = 107;  // Closest zoom — USA fills most of the screen
+export const ZOOM_MAX_DISTANCE = 200;  // Farthest zoom — full globe with generous padding
+export const CONTROLS_HINT_HIDE_DISTANCE = 175; // Hide control hints when zoomed in past this
 
 // Star background settings
 export const STAR_SPHERE_RADIUS = 20000;

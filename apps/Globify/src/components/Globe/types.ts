@@ -258,6 +258,59 @@ export interface NetworkRiskMetrics {
 }
 
 /**
+ * Types representing a selected entity on the globe for the inspect panel.
+ */
+export type SelectedEntityType = 'supplier' | 'dc' | 'restaurant' | 'route';
+
+export interface SelectedSupplier {
+  type: 'supplier';
+  location: Location;
+  /** DCs served by this supplier */
+  dcCount: number;
+  /** Outbound routes from this supplier */
+  outboundRoutes: SupplyRoute[];
+  /** Total outbound volume (units/week) */
+  totalVolume: number;
+}
+
+export interface SelectedDC {
+  type: 'dc';
+  location: Location;
+  /** Inbound supplier routes */
+  inboundRoutes: SupplyRoute[];
+  /** Outbound restaurant routes */
+  outboundRoutes: SupplyRoute[];
+  /** Total inbound volume */
+  totalInboundVolume: number;
+  /** Total outbound volume */
+  totalOutboundVolume: number;
+}
+
+export interface SelectedRestaurant {
+  type: 'restaurant';
+  location: Location;
+  /** Routes supplying this restaurant */
+  inboundRoutes: SupplyRoute[];
+  /** Total inbound volume */
+  totalInboundVolume: number;
+  /** Serving DC names */
+  servingDCs: string[];
+}
+
+export interface SelectedRoute {
+  type: 'route';
+  route: SupplyRoute;
+  source: Location;
+  destination: Location;
+}
+
+export type SelectedEntity =
+  | SelectedSupplier
+  | SelectedDC
+  | SelectedRestaurant
+  | SelectedRoute;
+
+/**
  * Props for the GlobeVisualization component.
  */
 export interface GlobeVisualizationProps {

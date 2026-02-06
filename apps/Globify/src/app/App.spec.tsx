@@ -3,11 +3,71 @@ import { render } from '@testing-library/react-native';
 
 import App from './App';
 
+// Mock three-globe (ESM module) to prevent SyntaxError
+jest.mock('three-globe', () => {
+  return jest.fn().mockImplementation(() => ({
+    globeImageUrl: jest.fn().mockReturnThis(),
+    showAtmosphere: jest.fn().mockReturnThis(),
+    atmosphereColor: jest.fn().mockReturnThis(),
+    atmosphereAltitude: jest.fn().mockReturnThis(),
+    objectsData: jest.fn().mockReturnThis(),
+    objectThreeObject: jest.fn().mockReturnThis(),
+    objectLat: jest.fn().mockReturnThis(),
+    objectLng: jest.fn().mockReturnThis(),
+    objectAltitude: jest.fn().mockReturnThis(),
+    arcsData: jest.fn().mockReturnThis(),
+    arcStartLat: jest.fn().mockReturnThis(),
+    arcStartLng: jest.fn().mockReturnThis(),
+    arcEndLat: jest.fn().mockReturnThis(),
+    arcEndLng: jest.fn().mockReturnThis(),
+    arcColor: jest.fn().mockReturnThis(),
+    arcStroke: jest.fn().mockReturnThis(),
+    arcDashLength: jest.fn().mockReturnThis(),
+    arcDashGap: jest.fn().mockReturnThis(),
+    arcDashAnimateTime: jest.fn().mockReturnThis(),
+    arcAltitudeAutoScale: jest.fn().mockReturnThis(),
+    onGlobeReady: jest.fn().mockReturnThis(),
+    pointsData: jest.fn().mockReturnThis(),
+    pointAltitude: jest.fn().mockReturnThis(),
+    pointRadius: jest.fn().mockReturnThis(),
+    pointColor: jest.fn().mockReturnThis(),
+  }));
+});
+
+// Mock @react-three/fiber
+jest.mock('@react-three/fiber', () => ({
+  Canvas: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useFrame: jest.fn(),
+  useThree: jest.fn(() => ({
+    camera: { position: { set: jest.fn() } },
+    gl: { domElement: { addEventListener: jest.fn(), removeEventListener: jest.fn(), getBoundingClientRect: jest.fn(() => ({ left: 0, top: 0, width: 100, height: 100 })) } },
+    scene: { background: null, add: jest.fn(), remove: jest.fn() },
+  })),
+}));
+
+// Mock three TextureLoader
+jest.mock('three', () => ({
+  ...jest.requireActual('three'),
+  TextureLoader: jest.fn().mockImplementation(() => ({
+    load: jest.fn(() => ({})),
+  })),
+}));
+
+// Mock OrbitControls
+jest.mock('three/examples/jsm/controls/OrbitControls.js', () => ({
+  OrbitControls: jest.fn().mockImplementation(() => ({
+    enableZoom: true,
+    enablePan: true,
+    enableRotate: true,
+    update: jest.fn(),
+    dispose: jest.fn(),
+  })),
+}));
+
 describe('App Component', () => {
   it('should render GlobeVisualization component', () => {
-    const { UNSAFE_getByType } = render(<App />);
-    // This will fail until we implement GlobeVisualization in App.tsx
-    const globe = UNSAFE_getByType('GlobeVisualization' as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    const { getByTestId } = render(<App />);
+    const globe = getByTestId('globe-visualization');
     expect(globe).toBeTruthy();
   });
 

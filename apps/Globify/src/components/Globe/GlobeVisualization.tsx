@@ -9,8 +9,8 @@
 import React, { useState, useMemo, useCallback, Suspense } from 'react';
 import { View, Platform, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Canvas } from '@react-three/fiber';
-import type { GlobeVisualizationProps, ViewMode, DataPoint } from './types';
-import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR } from './constants';
+import type { GlobeVisualizationProps, ViewMode, DataPoint, SelectedEntity } from './types';
+import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, CONTROLS_HINT_HIDE_DISTANCE } from './constants';
 import { styles } from './styles';
 import { LoadingFallback } from './LoadingFallback';
 import { GlobeScene } from './GlobeScene';
@@ -18,11 +18,14 @@ import { ViewModeToggle } from './ViewModeToggle';
 import { RiskPanel } from './RiskPanel';
 import { LegendPanel } from './LegendPanel';
 import { DisruptionPanel } from './DisruptionPanel';
+import { EntityDetailPanel } from './EntityDetailPanel';
 import { computeNetworkRiskMetrics } from '../../services/concentrationRisk';
 import { applyRiskColorsToPoints, applyRiskColorsToArcs } from '../../services/riskVisuals';
 import { computeDisruptionMetrics } from '../../services/disruptionAnalysis';
 import { applyDisruptionToPoints, applyDisruptionToArcs } from '../../services/disruptionVisuals';
-import { allLocations, allRoutes } from '../../services/supplyChainData';
+import { allLocations, allRoutes, getLocationById, buildSelectedEntity } from '../../services/supplyChainData';
+import { applySelectionToPoints, applySelectionToArcs } from '../../services/selectionHighlight';
+import { clusterByZoom, isClusterId, getClusterById } from '../../services/lodClustering';
 
 /**
  * Main GlobeVisualization component
@@ -43,6 +46,12 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   const [isStarsSpinning, setIsStarsSpinning] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('standard');
   const [disabledNodeIds, setDisabledNodeIds] = useState<Set<string>>(new Set());
+  const [selectedEntity, setSelectedEntity] = useState<SelectedEntity | null>(null);
+  const [cameraDistance, setCameraDistance] = useState<number>(
+    Math.round(Math.sqrt(CAMERA_POSITION[0] ** 2 + CAMERA_POSITION[1] ** 2 + CAMERA_POSITION[2] ** 2))
+  );
+
+  const isMobile = Platform.OS !== 'web';
 
   // Compute network risk metrics once (only depends on static route/location data)
   const networkRiskMetrics = useMemo(
@@ -68,27 +77,44 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
     [disruptionMetrics]
   );
 
+  // LOD clustering — aggregate nearby restaurants at far zoom
+  const { dataPoints: lodDataPoints, arcsData: lodArcsData } = useMemo(
+    () => clusterByZoom(dataPoints, arcsData, cameraDistance),
+    [dataPoints, arcsData, cameraDistance],
+  );
+
   // Derive risk-colored arcs when in concentration-risk view
   const effectiveArcsData = useMemo(() => {
     if (viewMode === 'concentration-risk') {
-      return applyRiskColorsToArcs(arcsData, networkRiskMetrics);
+      return applyRiskColorsToArcs(lodArcsData, networkRiskMetrics);
     }
     if (viewMode === 'disruption') {
-      return applyDisruptionToArcs(arcsData, disabledNodeIds, partiallyServedIds);
+      return applyDisruptionToArcs(lodArcsData, disabledNodeIds, partiallyServedIds);
     }
-    return arcsData;
-  }, [viewMode, arcsData, networkRiskMetrics, disabledNodeIds, partiallyServedIds]);
+    return lodArcsData;
+  }, [viewMode, lodArcsData, networkRiskMetrics, disabledNodeIds, partiallyServedIds]);
 
   // Derive disruption-colored data points when in disruption view
   const effectiveDataPoints = useMemo(() => {
     if (viewMode === 'concentration-risk') {
-      return applyRiskColorsToPoints(dataPoints, networkRiskMetrics, allLocations);
+      return applyRiskColorsToPoints(lodDataPoints, networkRiskMetrics, allLocations);
     }
     if (viewMode === 'disruption') {
-      return applyDisruptionToPoints(dataPoints, disabledNodeIds, orphanedIds, partiallyServedIds);
+      return applyDisruptionToPoints(lodDataPoints, disabledNodeIds, orphanedIds, partiallyServedIds);
     }
-    return dataPoints;
-  }, [viewMode, dataPoints, networkRiskMetrics, disabledNodeIds, orphanedIds, partiallyServedIds]);
+    return lodDataPoints;
+  }, [viewMode, lodDataPoints, networkRiskMetrics, disabledNodeIds, orphanedIds, partiallyServedIds]);
+
+  // Final pass: spotlight the selected entity and dim everything else
+  const highlightedDataPoints = useMemo(() => {
+    if (!selectedEntity) return effectiveDataPoints;
+    return applySelectionToPoints(effectiveDataPoints, selectedEntity);
+  }, [effectiveDataPoints, selectedEntity]);
+
+  const highlightedArcsData = useMemo(() => {
+    if (!selectedEntity) return effectiveArcsData;
+    return applySelectionToArcs(effectiveArcsData, selectedEntity);
+  }, [effectiveArcsData, selectedEntity]);
 
   const handleError = (err: Error) => {
     setError(err);
@@ -119,25 +145,68 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
           return 'standard';
       }
     });
+    // Close the inspect panel when switching modes
+    setSelectedEntity(null);
   };
 
-  // Toggle a node's disabled state (only suppliers and DCs)
+  // Toggle a node's disabled state (only suppliers and DCs) in disruption mode,
+  // or open the inspect panel in other modes.
   const handlePointClick = useCallback(
     (point: DataPoint) => {
-      if (viewMode !== 'disruption') return;
       const pointId = point.id;
       if (!pointId) return;
-      // Only suppliers and DCs are toggleable
-      if (point.locationType === 'restaurant') return;
 
-      setDisabledNodeIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(pointId)) {
-          next.delete(pointId);
-        } else {
-          next.add(pointId);
+      if (viewMode === 'disruption') {
+        // Suppliers and DCs toggle their disruption state
+        if (point.locationType !== 'restaurant') {
+          setDisabledNodeIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(pointId)) {
+              next.delete(pointId);
+            } else {
+              next.add(pointId);
+            }
+            return next;
+          });
+          return;
         }
-        return next;
+        // Restaurants open the inspect panel in disruption mode
+        // (fall through to entity selection below)
+      }
+
+      // Open entity detail panel (all modes, or restaurants in disruption mode)
+      // Handle cluster markers — build a summary from member restaurants
+      if (isClusterId(pointId)) {
+        const cluster = getClusterById(pointId);
+        if (cluster) {
+          setSelectedEntity((prev) => {
+            if (prev && prev.type !== 'route' && prev.location.id === pointId) return null;
+            return {
+              type: 'restaurant',
+              location: {
+                id: cluster.id,
+                name: `${cluster.size} Restaurants (${cluster.metro.toUpperCase()})`,
+                lat: cluster.lat,
+                lng: cluster.lng,
+                type: 'restaurant',
+              },
+              inboundRoutes: [],
+              totalInboundVolume: 0,
+              servingDCs: [],
+            };
+          });
+        }
+        return;
+      }
+
+      const location = getLocationById(pointId);
+      if (!location) return;
+      setSelectedEntity((prev) => {
+        // If same entity is already selected, close the panel
+        if (prev && prev.type !== 'route' && prev.location.id === pointId) {
+          return null;
+        }
+        return buildSelectedEntity(location);
       });
     },
     [viewMode]
@@ -146,6 +215,11 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   // Reset all disruption state
   const handleResetAll = useCallback(() => {
     setDisabledNodeIds(new Set());
+  }, []);
+
+  // Close the entity detail panel
+  const handleCloseEntity = useCallback(() => {
+    setSelectedEntity(null);
   }, []);
 
   if (error) {
@@ -182,13 +256,14 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
           style={styles.canvas}
         >
           <GlobeScene 
-            dataPoints={effectiveDataPoints}
-            arcsData={effectiveArcsData}
+            dataPoints={highlightedDataPoints}
+            arcsData={highlightedArcsData}
             onReady={onReady} 
             onError={handleError}
             onTextureLoading={handleTextureLoading}
             isStarsSpinning={isStarsSpinning}
-            onPointClick={viewMode === 'disruption' ? handlePointClick : undefined}
+            onPointClick={handlePointClick}
+            onZoomChange={setCameraDistance}
           />
         </Canvas>
       </Suspense>
@@ -237,12 +312,39 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
                 textAlign: 'center',
               }}
             >
-              Click a supplier{' '}
+              {isMobile ? 'Tap' : 'Click'} a supplier{' '}
               <Text style={{ color: '#22AA44' }}>▲</Text> or DC{' '}
               <Text style={{ color: '#22AA44' }}>■</Text> to simulate a
               disruption
             </Text>
           </View>
+        </View>
+      )}
+      {/* Controls hint — hidden when zoomed in */}
+      {cameraDistance > CONTROLS_HINT_HIDE_DISTANCE && (
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 16,
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <Text
+            style={{
+              color: 'rgba(255, 255, 255, 0.5)',
+              fontSize: 11,
+              fontWeight: '400',
+              letterSpacing: 0.5,
+              textAlign: 'center',
+            }}
+          >
+            {isMobile
+              ? 'Pinch to zoom · Swipe to rotate · Tap to inspect'
+              : 'Scroll to zoom · Drag to rotate · Click to inspect'}
+          </Text>
         </View>
       )}
       {/* View mode toggle */}
@@ -257,6 +359,11 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
         metrics={disruptionMetrics}
         visible={viewMode === 'disruption' && disabledNodeIds.size > 0}
         onResetAll={handleResetAll}
+      />
+      {/* Entity detail inspect panel */}
+      <EntityDetailPanel
+        entity={selectedEntity}
+        onClose={handleCloseEntity}
       />
     </View>
   );
