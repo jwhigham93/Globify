@@ -144,6 +144,9 @@ export function transformToArcs(locations: Location[], routes: SupplyRoute[]): A
         color: getColorForRouteType(route.routeType),
         strokeWidth: calculateStrokeWidth(route.volume, route.routeType, volumeRange.min, volumeRange.max),
         label: `${source.name} → ${dest.name} (${route.volume.toLocaleString()} units/week)`,
+        sourceId: route.sourceId,
+        destId: route.destId,
+        routeType: route.routeType,
       };
     })
     .filter((arc): arc is ArcData => arc !== null);
@@ -154,6 +157,7 @@ export function transformToArcs(locations: Location[], routes: SupplyRoute[]): A
  */
 export function transformToDataPoints(locations: Location[]): DataPoint[] {
   return locations.map(loc => ({
+    id: loc.id,
     lat: loc.lat,
     lng: loc.lng,
     label: loc.name,
@@ -161,6 +165,7 @@ export function transformToDataPoints(locations: Location[]): DataPoint[] {
     color: getPointColorByType(loc.type),
     // Barely above surface
     value: loc.type === 'dc' ? 3 : loc.type === 'supplier' ? 2 : 1,
+    locationType: loc.type,
   }));
 }
 

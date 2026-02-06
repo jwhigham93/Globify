@@ -96,6 +96,29 @@ export const dcToRestaurantRoutes: SupplyRoute[] = [
   { id: 'route-d2r-043', sourceId: 'dc-conley', destId: 'rest-043', routeType: 'dc_to_restaurant', volume: 160, isActive: true },
   { id: 'route-d2r-044', sourceId: 'dc-conley', destId: 'rest-044', routeType: 'dc_to_restaurant', volume: 180, isActive: true },
   { id: 'route-d2r-045', sourceId: 'dc-conley', destId: 'rest-045', routeType: 'dc_to_restaurant', volume: 140, isActive: true },
+
+  // ── Multi-DC overlap routes ──────────────────────────────────────────────
+  // Some restaurants near regional borders are served by two DCs for redundancy.
+  // These enable the "partially served" (orange) state in disruption simulation.
+
+  // Nashville — also served by Atlanta DC (primary: Conley)
+  { id: 'route-d2r-046', sourceId: 'dc-atlanta', destId: 'rest-003', routeType: 'dc_to_restaurant', volume: 280, isActive: true },
+  // Charleston — also served by Atlanta DC (primary: Mebane)
+  { id: 'route-d2r-047', sourceId: 'dc-atlanta', destId: 'rest-010', routeType: 'dc_to_restaurant', volume: 200, isActive: true },
+  // Birmingham — also served by Conley DC (primary: Atlanta)
+  { id: 'route-d2r-048', sourceId: 'dc-conley', destId: 'rest-008', routeType: 'dc_to_restaurant', volume: 180, isActive: true },
+  // Fort Worth — also served by Elgin DC (primary: Dallas)
+  { id: 'route-d2r-049', sourceId: 'dc-elgin', destId: 'rest-014', routeType: 'dc_to_restaurant', volume: 220, isActive: true },
+  // Austin — also served by Dallas DC (primary: Elgin)
+  { id: 'route-d2r-050', sourceId: 'dc-dallas', destId: 'rest-013', routeType: 'dc_to_restaurant', volume: 240, isActive: true },
+  // Denver — also served by Dallas DC (primary: Elgin)
+  { id: 'route-d2r-051', sourceId: 'dc-dallas', destId: 'rest-030', routeType: 'dc_to_restaurant', volume: 180, isActive: true },
+  // Indianapolis — also served by Mebane DC (primary: Joliet)
+  { id: 'route-d2r-052', sourceId: 'dc-mebane', destId: 'rest-017', routeType: 'dc_to_restaurant', volume: 160, isActive: true },
+  // St. Louis — also served by Atlanta DC (primary: Joliet)
+  { id: 'route-d2r-053', sourceId: 'dc-atlanta', destId: 'rest-021', routeType: 'dc_to_restaurant', volume: 200, isActive: true },
+  // Washington DC — also served by Conley DC (primary: Mebane)
+  { id: 'route-d2r-054', sourceId: 'dc-conley', destId: 'rest-029', routeType: 'dc_to_restaurant', volume: 250, isActive: true },
 ];
 
 /**

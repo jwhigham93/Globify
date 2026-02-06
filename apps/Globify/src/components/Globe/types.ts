@@ -65,6 +65,12 @@ export interface ArcData {
   strokeWidth: number;
   /** Label for hover/tap tooltip */
   label: string;
+  /** Source location ID (for risk coloring) */
+  sourceId?: string;
+  /** Destination location ID (for risk coloring) */
+  destId?: string;
+  /** Route type (for risk coloring) */
+  routeType?: 'supplier_to_dc' | 'dc_to_restaurant';
 }
 
 /**
@@ -109,6 +115,18 @@ export interface DataPoint {
    * Examples: '#FF5733', 'rgba(255, 87, 51, 0.8)', 'red'
    */
   color?: string;
+
+  /**
+   * Optional location ID for identifying the point in interactions.
+   */
+  id?: string;
+
+  /**
+   * Location type for custom 3D marker shape.
+   * Determines whether the point renders as cone (supplier),
+   * box (DC), or sphere (restaurant).
+   */
+  locationType?: LocationType;
 }
 
 /**
@@ -141,6 +159,102 @@ export interface GlobeState {
     y: number;
     z: number;
   };
+}
+
+/**
+ * View modes for the globe visualization
+ */
+export type ViewMode = 'standard' | 'concentration-risk' | 'disruption';
+
+/**
+ * Disruption impact metrics derived from disabled nodes
+ */
+export interface DisruptionMetrics {
+  /** Number of nodes currently disabled */
+  disabledCount: number;
+  /** Names and types of disabled nodes */
+  disabledNodes: { id: string; name: string; type: LocationType }[];
+  /** Number of routes affected (source or dest disabled) */
+  affectedRouteCount: number;
+  /** Restaurants that lost all supply paths */
+  orphanedRestaurants: Location[];
+  /** Restaurants that lost some (but not all) supply paths — reduced capacity */
+  partiallyServedRestaurants: Location[];
+}
+
+/**
+ * Risk level classification for suppliers
+ */
+export type RiskLevel = 'low' | 'medium' | 'high';
+
+/**
+ * Concentration risk score for an individual supplier
+ */
+export interface SupplierRiskScore {
+  /** Supplier location ID */
+  supplierId: string;
+  /** Supplier display name */
+  name: string;
+  /** Total outbound volume (units/week) */
+  totalVolume: number;
+  /** Volume as percentage of total network inbound (0-100) */
+  volumeShare: number;
+  /** Risk score (same as volumeShare for supplier concentration) */
+  riskScore: number;
+  /** Classified risk level */
+  riskLevel: RiskLevel;
+  /** Number of DCs this supplier serves */
+  dcCount: number;
+}
+
+/**
+ * Diversification score for an individual DC
+ */
+export interface DCDiversificationScore {
+  /** DC location ID */
+  dcId: string;
+  /** DC display name */
+  name: string;
+  /** Number of unique suppliers */
+  supplierCount: number;
+  /** Diversification score (0-100, 100 = perfectly diversified) */
+  diversificationScore: number;
+  /** Breakdown of volume share per supplier */
+  supplierBreakdown: { supplierId: string; name: string; volumeShare: number }[];
+}
+
+/**
+ * Risk score for an individual restaurant based on its DC's diversification
+ */
+export interface RestaurantRiskScore {
+  /** Restaurant location ID */
+  restaurantId: string;
+  /** Restaurant display name */
+  name: string;
+  /** The DC this restaurant is served by */
+  servingDcId: string;
+  /** The serving DC's diversification score (0-100) */
+  dcDiversificationScore: number;
+  /** Restaurant risk score (0-100, inverse of DC diversification) */
+  riskScore: number;
+  /** Classified risk level */
+  riskLevel: RiskLevel;
+}
+
+/**
+ * Network-level risk metrics
+ */
+export interface NetworkRiskMetrics {
+  /** Overall network diversification score (0-100) */
+  networkDiversificationScore: number;
+  /** Herfindahl-Hirschman Index (sum of squared market shares) */
+  hhi: number;
+  /** Per-supplier risk scores */
+  supplierRisks: SupplierRiskScore[];
+  /** Per-DC diversification scores */
+  dcDiversification: DCDiversificationScore[];
+  /** Per-restaurant risk scores derived from their DC's diversification */
+  restaurantRisks: RestaurantRiskScore[];
 }
 
 /**
