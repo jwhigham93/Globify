@@ -13,6 +13,8 @@ export const TEXTURE_ASSETS = {
   earthNightMediumRes: require('../../../assets/textures/earth-night-2016-mediumres-gray.jpg'),
   // NASA Black Marble 2016 Grayscale - High resolution (13500x6750, 3km)
   earthNightHighRes: require('../../../assets/textures/earth-night-2016-highres-gray.jpg'),
+  // NASA Black Marble 2016 Grayscale - High resolution (13500x6750, 3km) - Dimmed lights
+  earthNightHighResDimmed: require('../../../assets/textures/earth-night-2016-highres-gray-dimmed-2.jpg'),
   // NASA Blue Marble Next Generation - Medium resolution (5400x2700, 8km) - July 2004
   earthDayMediumRes: require('../../../assets/textures/earth-day-bluemarble-mediumres.jpg'),
   // Starry background

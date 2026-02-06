@@ -18,9 +18,9 @@ export const LegendPanel: React.FC<LegendPanelProps> = ({ viewMode }) => {
   const isDisruptionMode = viewMode === 'disruption';
 
   // Shape icon colors change per mode to match on-globe appearance
-  const supplierColor = isDisruptionMode ? '#22AA44' : '#CC7722';
-  const dcColor = isDisruptionMode ? '#22AA44' : '#00A3FF';
-  const restaurantColor = isDisruptionMode ? '#22AA44' : '#E60E33';
+  const supplierColor = isDisruptionMode ? '#22AA44' : '#FF9933';
+  const dcColor = isDisruptionMode ? '#22AA44' : '#003e5f';
+  const restaurantColor = isDisruptionMode ? '#22AA44' : '#FF2244';
 
   return (
     <View style={legendStyles.container}>

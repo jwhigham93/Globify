@@ -41,10 +41,12 @@ export interface GlobeSceneProps {
  */
 function createLocationMarker(point: DataPoint): THREE.Mesh {
   const color = new THREE.Color(point.color || MEDIUM_CANDY_APPLE_RED);
-  const material = new THREE.MeshLambertMaterial({
+  const material = new THREE.MeshStandardMaterial({
     color,
     emissive: color,
     emissiveIntensity: MARKER_EMISSIVE_INTENSITY,
+    roughness: 0.8,
+    metalness: 0.4,
   });
 
   let geometry: THREE.BufferGeometry;
@@ -106,7 +108,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       // Create globe instance matching submarine cables example style
       // Using NASA Black Marble 2016 high-resolution texture (13500x6750)
       // Options: earthNightHighRes (high-res), earthNightMediumRes (lighter weight)
-      const earthTextureUri = resolveAssetUri(TEXTURE_ASSETS.earthNightHighRes);
+      const earthTextureUri = resolveAssetUri(TEXTURE_ASSETS.earthNightHighResDimmed);
       
       const globe = new ThreeGlobe({ animateIn: false })
         .globeImageUrl(earthTextureUri)

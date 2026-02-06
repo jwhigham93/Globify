@@ -8,29 +8,29 @@ export const DEFAULT_BACKGROUND_COLOR = '#000000';
 export const ATMOSPHERE_COLOR = '#ffffff';
 
 // Arc colors - gradient arrays [startColor, endColor]
-export const SUPPLIER_TO_DC_COLOR: [string, string] = ['#CC7722', '#00A3FF']; // Brown to Blue
-export const DC_TO_RESTAURANT_COLOR: [string, string] = ['#00A3FF', '#E60E33']; // Blue to CFA Red
+export const SUPPLIER_TO_DC_COLOR: [string, string] = ['#FF9933', '#003e5f']; // Vivid amber to dark blue
+export const DC_TO_RESTAURANT_COLOR: [string, string] = ['#00A3FF', '#E60E33']; // Dark blue to vivid CFA red
 
-// Arc stroke settings (volume-based thickness, kept thin to reduce overlap)
-export const ARC_BASE_STROKE_SUPPLIER_TO_DC = 0.02;
-export const ARC_BASE_STROKE_DC_TO_RESTAURANT = 0.02;
-export const ARC_MIN_STROKE = 0.01;
-export const ARC_MAX_STROKE = 0.8;
+// Arc stroke settings (volume-based thickness)
+export const ARC_BASE_STROKE_SUPPLIER_TO_DC = 0.06;
+export const ARC_BASE_STROKE_DC_TO_RESTAURANT = 0.04;
+export const ARC_MIN_STROKE = 0.02;
+export const ARC_MAX_STROKE = 1.0;
 
-// Arc animation settings (very short dash = sharp color bands)
-export const ARC_DASH_LENGTH = 0.02;
-export const ARC_DASH_GAP = 0.005;
-export const ARC_ANIMATE_TIME = 50000; // milliseconds - slow crawl
+// Arc animation settings (longer dash = bolder bands, narrow gap for near-solid look)
+export const ARC_DASH_LENGTH = 0.6;
+export const ARC_DASH_GAP = 0.02;
+export const ARC_ANIMATE_TIME = 7000; // milliseconds - visible flow speed
 
 // Point radius by location type (kept small for dense areas)
 export const POINT_RADIUS_SUPPLIER = 0.06;
 export const POINT_RADIUS_DC = 0.06;
 export const POINT_RADIUS_RESTAURANT = 0.03;
 
-// Point colors by location type
-export const POINT_COLOR_SUPPLIER = '#CC7722'; // Warm brown (visible against dark globe)
-export const POINT_COLOR_DC = '#00A3FF'; // Blue (matches arc midpoint)
-export const POINT_COLOR_RESTAURANT = '#E60E33'; // CFA Red (matches arc end)
+// Point colors by location type (vivid to pop against dark globe)
+export const POINT_COLOR_SUPPLIER = '#FF9933'; // Vivid amber
+export const POINT_COLOR_DC = '#003e5f'; // Dark blue
+export const POINT_COLOR_RESTAURANT = '#E60E33'; // Vivid CFA red
 
 // Globe settings
 export const ATMOSPHERE_ALTITUDE = 0.20;
@@ -56,11 +56,11 @@ export const PARTIAL_SUPPLY_NODE_COLOR = '#EE8800';                             
 export const PARTIAL_SUPPLY_ARC_COLOR: [string, string] = ['#EE8800', '#EE8800'];   // Orange for degraded supply arcs
 
 // Custom 3D marker geometry sizes (in globe-relative units)
-export const MARKER_SUPPLIER_RADIUS = 0.22;
-export const MARKER_SUPPLIER_HEIGHT = 0.8;
-export const MARKER_DC_SIZE = 0.38;
-export const MARKER_RESTAURANT_RADIUS = 0.15;
-export const MARKER_EMISSIVE_INTENSITY = 0.6;
+export const MARKER_SUPPLIER_RADIUS = 0.28;
+export const MARKER_SUPPLIER_HEIGHT = 1.0;
+export const MARKER_DC_SIZE = 0.45;
+export const MARKER_RESTAURANT_RADIUS = 0.18;
+export const MARKER_EMISSIVE_INTENSITY = 1.2;
 export const MARKER_ALTITUDE = 0;  // Flush with globe surface
 
 // Camera settings

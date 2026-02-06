@@ -28,9 +28,9 @@ function typeIcon(type: string): string {
 }
 
 function typeColor(type: string): string {
-  if (type === 'supplier') return '#CC7722';
-  if (type === 'dc') return '#00A3FF';
-  return '#E60E33';
+  if (type === 'supplier') return '#FF9933';
+  if (type === 'dc') return '#003e5f';
+  return '#FF2244';
 }
 
 export const DisruptionPanel: React.FC<DisruptionPanelProps> = ({
