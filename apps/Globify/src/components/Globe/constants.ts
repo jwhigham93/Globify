@@ -62,6 +62,13 @@ export const MARKER_DC_SIZE = 0.45;
 export const MARKER_RESTAURANT_RADIUS = 0.09;
 export const MARKER_EMISSIVE_INTENSITY = 1.2;
 
+// Cluster marker settings (distinct ring shape for metro clusters)
+export const MARKER_CLUSTER_RING_RADIUS = 0.45;
+export const MARKER_CLUSTER_RING_TUBE = 0.07;
+export const MARKER_CLUSTER_DISC_HEIGHT = 0.06;
+export const MARKER_CLUSTER_COLOR = '#FF4488';
+export const MARKER_CLUSTER_GLOW_INTENSITY = 2.0;
+
 // Marker altitudes are computed dynamically via collisionDetection.ts
 // Only markers near other markers get raised — see buildAltitudeMap()
 

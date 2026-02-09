@@ -12,9 +12,13 @@ import {
 
 interface ControlsProps {
   onZoomChange?: (distance: number) => void;
+  /** When set, smoothly animate the camera to this distance */
+  zoomTarget?: number | null;
+  /** Called when the camera reaches the zoom target */
+  onZoomTargetReached?: () => void;
 }
 
-export const Controls: React.FC<ControlsProps> = ({ onZoomChange }) => {
+export const Controls: React.FC<ControlsProps> = ({ onZoomChange, zoomTarget, onZoomTargetReached }) => {
   const { camera, gl } = useThree();
   const controlsRef = useRef<OrbitControls | null>(null);
   const lastDistance = useRef<number>(0);
@@ -35,6 +39,17 @@ export const Controls: React.FC<ControlsProps> = ({ onZoomChange }) => {
 
   useFrame(() => {
     if (controlsRef.current) {
+      // Smooth zoom animation toward target distance
+      if (zoomTarget != null) {
+        const currentDist = camera.position.length();
+        if (Math.abs(currentDist - zoomTarget) < 2) {
+          onZoomTargetReached?.();
+        } else {
+          const newDist = currentDist + (zoomTarget - currentDist) * 0.06;
+          camera.position.normalize().multiplyScalar(newDist);
+        }
+      }
+
       controlsRef.current.update();
       // Report distance changes (rounded to avoid excessive re-renders)
       const dist = Math.round(camera.position.length());

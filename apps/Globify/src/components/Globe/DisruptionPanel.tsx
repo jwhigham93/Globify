@@ -9,8 +9,10 @@
  */
 
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import type { DisruptionMetrics } from './types';
+
+const NARROW_BREAKPOINT = 600;
 
 export interface DisruptionPanelProps {
   metrics: DisruptionMetrics;
@@ -38,13 +40,16 @@ export const DisruptionPanel: React.FC<DisruptionPanelProps> = ({
   visible,
   onResetAll,
 }) => {
+  const { width: screenWidth } = useWindowDimensions();
+  const isNarrow = screenWidth < NARROW_BREAKPOINT;
+
   if (!visible) return null;
 
   const { disabledCount, disabledNodes, affectedRouteCount, orphanedRestaurants, partiallyServedRestaurants } =
     metrics;
 
   return (
-    <View style={panelStyles.container}>
+    <View style={isNarrow ? panelStyles.containerNarrow : panelStyles.container}>
       <ScrollView
         style={panelStyles.scroll}
         showsVerticalScrollIndicator={false}
@@ -148,6 +153,18 @@ const panelStyles = StyleSheet.create({
     borderColor: 'rgba(204, 34, 34, 0.3)',
     overflow: 'hidden',
   },
+  containerNarrow: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 210,
+    maxHeight: '50%',
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(204, 34, 34, 0.3)',
+    overflow: 'hidden',
+  },
   scroll: {
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -191,6 +208,7 @@ const panelStyles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 20,
     fontWeight: '700',
+    textAlign: 'center',
   },
   metricLabel: {
     color: 'rgba(255, 255, 255, 0.5)',
@@ -199,6 +217,7 @@ const panelStyles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginTop: 2,
+    textAlign: 'center',
   },
   orphanMetric: {
     color: '#FF4444',

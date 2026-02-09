@@ -304,11 +304,28 @@ export interface SelectedRoute {
   destination: Location;
 }
 
+/** A cluster of nearby restaurants displayed as a single aggregate marker */
+export interface SelectedCluster {
+  type: 'cluster';
+  location: Location;
+  /** Metro code (e.g. "atl") */
+  metro: string;
+  /** Number of member restaurants */
+  memberCount: number;
+  /** Display names of member restaurants */
+  memberNames: string[];
+  /** Names of DCs serving these restaurants */
+  servingDCs: string[];
+  /** Total inbound volume across all members */
+  totalInboundVolume: number;
+}
+
 export type SelectedEntity =
   | SelectedSupplier
   | SelectedDC
   | SelectedRestaurant
-  | SelectedRoute;
+  | SelectedRoute
+  | SelectedCluster;
 
 /**
  * Props for the GlobeVisualization component.

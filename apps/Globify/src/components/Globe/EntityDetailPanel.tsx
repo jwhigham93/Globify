@@ -9,18 +9,23 @@
  */
 
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import type {
   SelectedEntity,
   SelectedSupplier,
   SelectedDC,
   SelectedRestaurant,
+  SelectedCluster,
 } from './types';
 import { getLocationById } from '../../services/supplyChainData';
+
+const NARROW_BREAKPOINT = 600;
 
 export interface EntityDetailPanelProps {
   entity: SelectedEntity | null;
   onClose: () => void;
+  /** Callback to zoom camera in, expanding a cluster into individual markers */
+  onZoomToExpand?: () => void;
 }
 
 // ── Sub-panels ─────────────────────────────────────────────────────────────
@@ -169,21 +174,76 @@ function formatVolume(v: number): string {
 function entityIcon(type: string): string {
   if (type === 'supplier') return '▲';
   if (type === 'dc') return '■';
+  if (type === 'cluster') return '◎';
   return '●';
 }
 
 function entityAccentColor(type: string): string {
   if (type === 'supplier') return '#FF9933';
   if (type === 'dc') return '#44AADD';
+  if (type === 'cluster') return '#FF4488';
   return '#FF2244';
 }
+
+const ClusterDetail: React.FC<{ data: SelectedCluster; onZoomIn?: () => void }> = ({
+  data,
+  onZoomIn,
+}) => {
+  return (
+    <>
+      <View style={s.metricsRow}>
+        <MetricBox label="Restaurants" value={data.memberCount} />
+        <MetricBox label="Serving DCs" value={data.servingDCs.length} />
+        <MetricBox label="Vol / Wk" value={formatVolume(data.totalInboundVolume)} />
+      </View>
+
+      {onZoomIn && (
+        <TouchableOpacity
+          style={s.zoomButton}
+          onPress={onZoomIn}
+          activeOpacity={0.7}
+        >
+          <Text style={s.zoomButtonText}>⊕  Zoom to Expand</Text>
+        </TouchableOpacity>
+      )}
+
+      <Text style={s.sectionTitle}>Restaurants ({data.memberCount})</Text>
+      {data.memberNames.map((name, i) => (
+        <View key={i} style={s.routeRow}>
+          <Text style={s.clusterDot}>●</Text>
+          <Text style={s.routeName} numberOfLines={1}>
+            {name}
+          </Text>
+        </View>
+      ))}
+
+      {data.servingDCs.length > 0 && (
+        <>
+          <Text style={s.sectionTitle}>Serving DCs</Text>
+          {data.servingDCs.map((dcName) => (
+            <View key={dcName} style={s.routeRow}>
+              <Text style={s.routeArrowIn}>■</Text>
+              <Text style={s.routeName} numberOfLines={1}>
+                {dcName}
+              </Text>
+            </View>
+          ))}
+        </>
+      )}
+    </>
+  );
+};
 
 // ── Main Panel ─────────────────────────────────────────────────────────────
 
 export const EntityDetailPanel: React.FC<EntityDetailPanelProps> = ({
   entity,
   onClose,
+  onZoomToExpand,
 }) => {
+  const { width: screenWidth } = useWindowDimensions();
+  const isNarrow = screenWidth < NARROW_BREAKPOINT;
+
   if (!entity) return null;
 
   const name =
@@ -196,10 +256,16 @@ export const EntityDetailPanel: React.FC<EntityDetailPanelProps> = ({
   const typeLabel =
     entity.type === 'dc'
       ? 'Distribution Center'
+      : entity.type === 'cluster'
+      ? 'Metro Cluster'
       : entity.type.charAt(0).toUpperCase() + entity.type.slice(1);
 
+  const containerStyle = isNarrow
+    ? [s.containerNarrow, { borderColor: accent + '44' }]
+    : [s.container, { borderColor: accent + '44' }];
+
   return (
-    <View style={[s.container, { borderColor: accent + '44' }]}>
+    <View style={containerStyle}>
       <ScrollView
         style={s.scroll}
         showsVerticalScrollIndicator={false}
@@ -238,6 +304,7 @@ export const EntityDetailPanel: React.FC<EntityDetailPanelProps> = ({
         {entity.type === 'supplier' && <SupplierDetail data={entity} />}
         {entity.type === 'dc' && <DCDetail data={entity} />}
         {entity.type === 'restaurant' && <RestaurantDetail data={entity} />}
+        {entity.type === 'cluster' && <ClusterDetail data={entity} onZoomIn={onZoomToExpand} />}
       </ScrollView>
     </View>
   );
@@ -253,6 +320,17 @@ const s = StyleSheet.create({
     width: 270,
     maxHeight: '75%',
     backgroundColor: 'rgba(0, 0, 0, 0.88)',
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  containerNarrow: {
+    position: 'absolute',
+    bottom: 80,
+    left: 10,
+    right: 10,
+    maxHeight: '45%',
+    backgroundColor: 'rgba(0, 0, 0, 0.92)',
     borderRadius: 12,
     borderWidth: 1,
     overflow: 'hidden',
@@ -328,6 +406,7 @@ const s = StyleSheet.create({
     color: '#ffffff',
     fontSize: 18,
     fontWeight: '700',
+    textAlign: 'center',
   },
   metricLabel: {
     color: 'rgba(255, 255, 255, 0.5)',
@@ -336,6 +415,7 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginTop: 2,
+    textAlign: 'center',
   },
   sectionTitle: {
     color: 'rgba(255, 255, 255, 0.5)',
@@ -378,6 +458,27 @@ const s = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.5)',
     fontSize: 10,
     fontWeight: '600',
+  },
+  zoomButton: {
+    backgroundColor: 'rgba(255, 68, 136, 0.15)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 68, 136, 0.4)',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  zoomButtonText: {
+    color: '#FF4488',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  clusterDot: {
+    color: '#E60E33',
+    fontSize: 6,
+    width: 14,
+    textAlign: 'center',
   },
 });
 

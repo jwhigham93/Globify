@@ -6,8 +6,10 @@
  */
 
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import type { NetworkRiskMetrics } from './types';
+
+const NARROW_BREAKPOINT = 600;
 
 export interface RiskPanelProps {
   metrics: NetworkRiskMetrics;
@@ -64,10 +66,13 @@ const RiskBar: React.FC<{ score: number; maxScore?: number }> = ({
 };
 
 export const RiskPanel: React.FC<RiskPanelProps> = ({ metrics, visible }) => {
+  const { width: screenWidth } = useWindowDimensions();
+  const isNarrow = screenWidth < NARROW_BREAKPOINT;
+
   if (!visible) return null;
 
   return (
-    <View style={panelStyles.container}>
+    <View style={isNarrow ? panelStyles.containerNarrow : panelStyles.container}>
       <ScrollView style={panelStyles.scroll} showsVerticalScrollIndicator={false}>
         {/* Network Score */}
         <Text style={panelStyles.title}>Network Risk</Text>
@@ -140,6 +145,18 @@ const panelStyles = StyleSheet.create({
     width: 280,
     maxHeight: '80%',
     backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    overflow: 'hidden',
+  },
+  containerNarrow: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 220,
+    maxHeight: '55%',
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',

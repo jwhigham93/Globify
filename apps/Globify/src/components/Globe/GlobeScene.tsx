@@ -20,6 +20,11 @@ import {
   MARKER_DC_SIZE,
   MARKER_RESTAURANT_RADIUS,
   MARKER_EMISSIVE_INTENSITY,
+  MARKER_CLUSTER_RING_RADIUS,
+  MARKER_CLUSTER_RING_TUBE,
+  MARKER_CLUSTER_DISC_HEIGHT,
+  MARKER_CLUSTER_COLOR,
+  MARKER_CLUSTER_GLOW_INTENSITY,
 } from './constants';
 import { buildAltitudeMap } from '../../services/collisionDetection';
 import { StarryBackground } from './StarryBackground';
@@ -33,14 +38,70 @@ export interface GlobeSceneProps {
   onTextureLoading?: (isLoading: boolean) => void;
   isStarsSpinning?: boolean;
   onPointClick?: (point: DataPoint) => void;
+  /** Called when the user clicks on empty space (no marker hit) */
+  onBackgroundClick?: () => void;
   onZoomChange?: (distance: number) => void;
+  /** When set, smoothly animate the camera to this distance */
+  zoomTarget?: number | null;
+  /** Called when the camera reaches the zoom target */
+  onZoomTargetReached?: () => void;
 }
 
 /**
- * Create a custom 3D marker mesh based on location type.
- * Suppliers → cone (factory), DCs → box (warehouse), Restaurants → sphere (retail)
+ * Create a distinct 3D marker for metro cluster markers.
+ * Uses a glowing ring (torus) + flat disc — a radar / target indicator.
  */
-function createLocationMarker(point: DataPoint): THREE.Mesh {
+function createClusterMarker(): THREE.Group {
+  const group = new THREE.Group();
+  const color = new THREE.Color(MARKER_CLUSTER_COLOR);
+
+  // Outer ring (torus) — lies flat in XY, +Z is radially outward from globe
+  const ringMat = new THREE.MeshStandardMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: MARKER_CLUSTER_GLOW_INTENSITY,
+    roughness: 0.3,
+    metalness: 0.6,
+    transparent: true,
+    opacity: 0.9,
+  });
+  const ringGeo = new THREE.TorusGeometry(
+    MARKER_CLUSTER_RING_RADIUS, MARKER_CLUSTER_RING_TUBE, 8, 24,
+  );
+  ringGeo.translate(0, 0, 0.1); // lift slightly above surface
+  group.add(new THREE.Mesh(ringGeo, ringMat));
+
+  // Inner disc (flat cylinder) — rotate so flat faces point along +Z
+  const discMat = new THREE.MeshStandardMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: MARKER_CLUSTER_GLOW_INTENSITY * 0.6,
+    roughness: 0.5,
+    metalness: 0.3,
+    transparent: true,
+    opacity: 0.6,
+  });
+  const discRadius = MARKER_CLUSTER_RING_RADIUS * 0.6;
+  const discGeo = new THREE.CylinderGeometry(
+    discRadius, discRadius, MARKER_CLUSTER_DISC_HEIGHT, 16,
+  );
+  discGeo.rotateX(Math.PI / 2);
+  discGeo.translate(0, 0, MARKER_CLUSTER_DISC_HEIGHT / 2 + 0.05);
+  group.add(new THREE.Mesh(discGeo, discMat));
+
+  return group;
+}
+
+/**
+ * Create a custom 3D marker based on location type.
+ * Clusters → ring+disc, Suppliers → cone, DCs → box, Restaurants → sphere
+ */
+function createLocationMarker(point: DataPoint): THREE.Object3D {
+  // Cluster markers get a distinct ring shape
+  if (point.id?.startsWith('cluster-')) {
+    return createClusterMarker();
+  }
+
   const color = new THREE.Color(point.color || MEDIUM_CANDY_APPLE_RED);
   const material = new THREE.MeshStandardMaterial({
     color,
@@ -80,15 +141,18 @@ function createLocationMarker(point: DataPoint): THREE.Mesh {
   return new THREE.Mesh(geometry, material);
 }
 
-export const GlobeScene: React.FC<GlobeSceneProps> = ({ 
-  dataPoints, 
+export const GlobeScene: React.FC<GlobeSceneProps> = ({
+  dataPoints,
   arcsData = [],
-  onReady, 
-  onError, 
-  onTextureLoading, 
+  onReady,
+  onError,
+  onTextureLoading,
   isStarsSpinning = true,
   onPointClick,
+  onBackgroundClick,
   onZoomChange,
+  zoomTarget,
+  onZoomTargetReached,
 }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globeRef = useRef<any>(null);
@@ -195,7 +259,8 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   // so we manually raycast against the globe's child meshes.
   // NOTE: DOM types unavailable (RN tsconfig excludes "dom" lib), hence `any` casts.
   useEffect(() => {
-    if (!globeRef.current || !isInitialized || !onPointClick) return;
+    if (!globeRef.current || !isInitialized) return;
+    if (!onPointClick && !onBackgroundClick) return;
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -237,12 +302,15 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         let obj: any = hit.object;
         while (obj && obj !== globeRef.current) {
           if (obj.__data) {
-            onPointClick(obj.__data as DataPoint);
+            onPointClick?.(obj.__data as DataPoint);
             return;
           }
           obj = obj.parent;
         }
       }
+
+      // No marker was hit — notify parent to deselect
+      onBackgroundClick?.();
     };
 
     canvas.addEventListener('mousedown', handleMouseDown);
@@ -252,7 +320,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       canvas.removeEventListener('mousedown', handleMouseDown);
       canvas.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [onPointClick, isInitialized, camera, gl]);
+  }, [onPointClick, onBackgroundClick, isInitialized, camera, gl]);
 
   // No auto-rotation - user controls the globe manually
 
@@ -263,7 +331,11 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       {/* Match globe.gl default lighting: 0.6 * Math.PI ≈ 1.88 intensity */}
       <ambientLight color={0xcccccc} intensity={2.6 * Math.PI} />
       <directionalLight position={[-2, 2, 0]} intensity={1.6 * Math.PI} />
-      <Controls onZoomChange={onZoomChange} />
+      <Controls
+        onZoomChange={onZoomChange}
+        zoomTarget={zoomTarget}
+        onZoomTargetReached={onZoomTargetReached}
+      />
     </>
   );
 };

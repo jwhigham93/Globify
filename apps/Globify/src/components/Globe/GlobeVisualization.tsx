@@ -23,9 +23,9 @@ import { computeNetworkRiskMetrics } from '../../services/concentrationRisk';
 import { applyRiskColorsToPoints, applyRiskColorsToArcs } from '../../services/riskVisuals';
 import { computeDisruptionMetrics } from '../../services/disruptionAnalysis';
 import { applyDisruptionToPoints, applyDisruptionToArcs } from '../../services/disruptionVisuals';
-import { allLocations, allRoutes, getLocationById, buildSelectedEntity } from '../../services/supplyChainData';
+import { allLocations, allRoutes, getLocationById, getInboundRoutes, buildSelectedEntity } from '../../services/supplyChainData';
 import { applySelectionToPoints, applySelectionToArcs } from '../../services/selectionHighlight';
-import { clusterByZoom, isClusterId, getClusterById } from '../../services/lodClustering';
+import { clusterByZoom, isClusterId, getClusterById, LOD_CLUSTER_CAMERA_THRESHOLD } from '../../services/lodClustering';
 
 /**
  * Main GlobeVisualization component
@@ -50,6 +50,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   const [cameraDistance, setCameraDistance] = useState<number>(
     Math.round(Math.sqrt(CAMERA_POSITION[0] ** 2 + CAMERA_POSITION[1] ** 2 + CAMERA_POSITION[2] ** 2))
   );
+  const [zoomTarget, setZoomTarget] = useState<number | null>(null);
 
   const isMobile = Platform.OS !== 'web';
 
@@ -181,8 +182,25 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
         if (cluster) {
           setSelectedEntity((prev) => {
             if (prev && prev.type !== 'route' && prev.location.id === pointId) return null;
+
+            // Build rich cluster info with member names and serving DCs
+            const memberNames = cluster.memberIds
+              .map((id) => getLocationById(id)?.name ?? id)
+              .sort();
+
+            const dcSet = new Set<string>();
+            let totalVolume = 0;
+            for (const memberId of cluster.memberIds) {
+              const routes = getInboundRoutes(memberId);
+              for (const r of routes) {
+                totalVolume += r.volume;
+                const dc = getLocationById(r.sourceId);
+                if (dc) dcSet.add(dc.name);
+              }
+            }
+
             return {
-              type: 'restaurant',
+              type: 'cluster',
               location: {
                 id: cluster.id,
                 name: `${cluster.size} Restaurants (${cluster.metro.toUpperCase()})`,
@@ -190,9 +208,11 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
                 lng: cluster.lng,
                 type: 'restaurant',
               },
-              inboundRoutes: [],
-              totalInboundVolume: 0,
-              servingDCs: [],
+              metro: cluster.metro,
+              memberCount: cluster.size,
+              memberNames,
+              servingDCs: [...dcSet].sort(),
+              totalInboundVolume: totalVolume,
             };
           });
         }
@@ -220,6 +240,17 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   // Close the entity detail panel
   const handleCloseEntity = useCallback(() => {
     setSelectedEntity(null);
+  }, []);
+
+  // Zoom in to break a cluster apart into individual markers
+  const handleZoomToExpand = useCallback(() => {
+    setZoomTarget(LOD_CLUSTER_CAMERA_THRESHOLD - 5);
+    setSelectedEntity(null);
+  }, []);
+
+  // Clear zoom target when animation completes
+  const handleZoomTargetReached = useCallback(() => {
+    setZoomTarget(null);
   }, []);
 
   if (error) {
@@ -255,15 +286,18 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
           }} 
           style={styles.canvas}
         >
-          <GlobeScene 
+          <GlobeScene
             dataPoints={highlightedDataPoints}
             arcsData={highlightedArcsData}
-            onReady={onReady} 
+            onReady={onReady}
             onError={handleError}
             onTextureLoading={handleTextureLoading}
             isStarsSpinning={isStarsSpinning}
             onPointClick={handlePointClick}
+            onBackgroundClick={handleCloseEntity}
             onZoomChange={setCameraDistance}
+            zoomTarget={zoomTarget}
+            onZoomTargetReached={handleZoomTargetReached}
           />
         </Canvas>
       </Suspense>
@@ -364,6 +398,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
       <EntityDetailPanel
         entity={selectedEntity}
         onClose={handleCloseEntity}
+        onZoomToExpand={handleZoomToExpand}
       />
     </View>
   );
