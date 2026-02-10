@@ -86,7 +86,7 @@ describe('getAffectedRoutes', () => {
 
   it('returns routes where source is disabled', () => {
     const affected = getAffectedRoutes(new Set(['sup-1']), routes);
-    const ids = affected.map((r) => r.id);
+    const ids = affected.map((r: SupplyRoute) => r.id);
     expect(ids).toContain('r1'); // sup-1 → dc-a
     expect(ids).toContain('r3'); // sup-1 → dc-b
     expect(ids).not.toContain('r2'); // sup-2 → dc-a (unrelated)
@@ -94,7 +94,7 @@ describe('getAffectedRoutes', () => {
 
   it('returns routes where destination is disabled', () => {
     const affected = getAffectedRoutes(new Set(['dc-a']), routes);
-    const ids = affected.map((r) => r.id);
+    const ids = affected.map((r: SupplyRoute) => r.id);
     expect(ids).toContain('r1'); // sup-1 → dc-a (dc-a is dest)
     expect(ids).toContain('r2'); // sup-2 → dc-a (dc-a is dest)
     expect(ids).toContain('r4'); // dc-a → rest-1 (dc-a is source)
@@ -106,13 +106,13 @@ describe('getAffectedRoutes', () => {
     // All active routes involve dc-a or dc-b
     expect(affected.length).toBe(7); // all active routes
     // Verify uniqueness
-    const uniqueIds = new Set(affected.map((r) => r.id));
+    const uniqueIds = new Set(affected.map((r: SupplyRoute) => r.id));
     expect(uniqueIds.size).toBe(affected.length);
   });
 
   it('excludes inactive routes', () => {
     const affected = getAffectedRoutes(new Set(['dc-b']), routes);
-    const ids = affected.map((r) => r.id);
+    const ids = affected.map((r: SupplyRoute) => r.id);
     expect(ids).not.toContain('r8'); // inactive
   });
 });
@@ -127,7 +127,7 @@ describe('getOrphanedRestaurants', () => {
   it('orphans restaurants served exclusively by a disabled DC', () => {
     // dc-a is the only DC for rest-1
     const orphans = getOrphanedRestaurants(new Set(['dc-a']), routes, locations);
-    const names = orphans.map((o) => o.name);
+    const names = orphans.map((o: Location) => o.name);
     expect(names).toContain('Restaurant 1');
     // rest-2 is served by both dc-a and dc-b — NOT orphaned
     expect(names).not.toContain('Restaurant 2');
@@ -136,7 +136,7 @@ describe('getOrphanedRestaurants', () => {
   it('does not orphan restaurants with alternate DCs', () => {
     // rest-2 has both dc-a and dc-b
     const orphans = getOrphanedRestaurants(new Set(['dc-a']), routes, locations);
-    expect(orphans.find((o) => o.id === 'rest-2')).toBeUndefined();
+    expect(orphans.find((o: Location) => o.id === 'rest-2')).toBeUndefined();
   });
 
   it('detects orphans from compound failure', () => {
@@ -146,7 +146,7 @@ describe('getOrphanedRestaurants', () => {
       routes,
       locations
     );
-    const names = orphans.map((o) => o.name);
+    const names = orphans.map((o: Location) => o.name);
     expect(names).toContain('Restaurant 1');
     expect(names).toContain('Restaurant 2');
     expect(names).toContain('Restaurant 3');
@@ -158,7 +158,7 @@ describe('getOrphanedRestaurants', () => {
       routes,
       locations
     );
-    const names = orphans.map((o) => o.name);
+    const names = orphans.map((o: Location) => o.name);
     expect(names).toEqual([...names].sort());
   });
 
@@ -179,14 +179,14 @@ describe('getPartiallyServedRestaurants', () => {
   it('identifies restaurants with some (but not all) DCs disabled', () => {
     // rest-2 is served by dc-a and dc-b; disabling dc-a → partially served
     const partial = getPartiallyServedRestaurants(new Set(['dc-a']), routes, locations);
-    const ids = partial.map((p) => p.id);
+    const ids = partial.map((p: Location) => p.id);
     expect(ids).toContain('rest-2');
   });
 
   it('does not include single-DC restaurants (they become orphaned, not partial)', () => {
     // rest-1 served only by dc-a → orphaned, not partially served
     const partial = getPartiallyServedRestaurants(new Set(['dc-a']), routes, locations);
-    const ids = partial.map((p) => p.id);
+    const ids = partial.map((p: Location) => p.id);
     expect(ids).not.toContain('rest-1');
   });
 
@@ -197,7 +197,7 @@ describe('getPartiallyServedRestaurants', () => {
       routes,
       locations
     );
-    const ids = partial.map((p) => p.id);
+    const ids = partial.map((p: Location) => p.id);
     expect(ids).not.toContain('rest-2');
   });
 
@@ -209,7 +209,7 @@ describe('getPartiallyServedRestaurants', () => {
 
   it('returns results sorted alphabetically', () => {
     const partial = getPartiallyServedRestaurants(new Set(['dc-a']), routes, locations);
-    const names = partial.map((p) => p.name);
+    const names = partial.map((p: Location) => p.name);
     expect(names).toEqual([...names].sort());
   });
 });

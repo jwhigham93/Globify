@@ -222,8 +222,8 @@ describe('clusterByZoom clustering', () => {
 
     // Should have cluster-atl and cluster-dfw
     const clusterIds = result.dataPoints
-      .filter((p) => isClusterId(p.id))
-      .map((p) => p.id);
+      .filter((p: DataPoint) => isClusterId(p.id))
+      .map((p: DataPoint) => p.id);
     expect(clusterIds).toContain('cluster-atl');
     expect(clusterIds).toContain('cluster-dfw');
   });
@@ -231,47 +231,47 @@ describe('clusterByZoom clustering', () => {
   it('does NOT cluster groups below minimum size', () => {
     const result = clusterByZoom(allPoints, arcs, farZoom);
     // JAX has only 2 — should remain individual
-    const jaxIds = result.dataPoints.map((p) => p.id).filter((id) => id?.startsWith('rest-jax'));
+    const jaxIds = result.dataPoints.map((p: DataPoint) => p.id).filter((id: string | undefined) => id?.startsWith('rest-jax'));
     expect(jaxIds).toHaveLength(2);
-    expect(result.dataPoints.map((p) => p.id)).not.toContain('cluster-jax');
+    expect(result.dataPoints.map((p: DataPoint) => p.id)).not.toContain('cluster-jax');
   });
 
   it('does NOT cluster groups with excessive geographic spread', () => {
     const result = clusterByZoom(allPoints, arcs, farZoom);
     // NE spread is huge — should remain individual
-    const neIds = result.dataPoints.map((p) => p.id).filter((id) => id?.startsWith('rest-ne'));
+    const neIds = result.dataPoints.map((p: DataPoint) => p.id).filter((id: string | undefined) => id?.startsWith('rest-ne'));
     expect(neIds).toHaveLength(4);
-    expect(result.dataPoints.map((p) => p.id)).not.toContain('cluster-ne');
+    expect(result.dataPoints.map((p: DataPoint) => p.id)).not.toContain('cluster-ne');
   });
 
   it('preserves suppliers and DCs as individual markers', () => {
     const result = clusterByZoom(allPoints, arcs, farZoom);
-    expect(result.dataPoints.find((p) => p.id === 'dc-atlanta')).toBeDefined();
-    expect(result.dataPoints.find((p) => p.id === 'sup-tyson')).toBeDefined();
+    expect(result.dataPoints.find((p: DataPoint) => p.id === 'dc-atlanta')).toBeDefined();
+    expect(result.dataPoints.find((p: DataPoint) => p.id === 'sup-tyson')).toBeDefined();
   });
 
   it('cluster marker sits at centroid of member coordinates', () => {
     const result = clusterByZoom(allPoints, arcs, farZoom);
-    const atlCluster = result.dataPoints.find((p) => p.id === 'cluster-atl');
+    const atlCluster = result.dataPoints.find((p: DataPoint) => p.id === 'cluster-atl');
     expect(atlCluster).toBeDefined();
 
-    const expectedLat = atlRestaurants.reduce((s, p) => s + p.lat, 0) / atlRestaurants.length;
-    const expectedLng = atlRestaurants.reduce((s, p) => s + p.lng, 0) / atlRestaurants.length;
+    const expectedLat = atlRestaurants.reduce((s: number, p: DataPoint) => s + p.lat, 0) / atlRestaurants.length;
+    const expectedLng = atlRestaurants.reduce((s: number, p: DataPoint) => s + p.lng, 0) / atlRestaurants.length;
     expect(atlCluster!.lat).toBeCloseTo(expectedLat, 4);
     expect(atlCluster!.lng).toBeCloseTo(expectedLng, 4);
   });
 
   it('cluster label includes count and metro code', () => {
     const result = clusterByZoom(allPoints, arcs, farZoom);
-    const atlCluster = result.dataPoints.find((p) => p.id === 'cluster-atl');
+    const atlCluster = result.dataPoints.find((p: DataPoint) => p.id === 'cluster-atl');
     expect(atlCluster!.label).toContain('5');
     expect(atlCluster!.label).toContain('ATL');
   });
 
   it('cluster marker size scales with member count', () => {
     const result = clusterByZoom(allPoints, arcs, farZoom);
-    const atlCluster = result.dataPoints.find((p) => p.id === 'cluster-atl');
-    const dfwCluster = result.dataPoints.find((p) => p.id === 'cluster-dfw');
+    const atlCluster = result.dataPoints.find((p: DataPoint) => p.id === 'cluster-atl');
+    const dfwCluster = result.dataPoints.find((p: DataPoint) => p.id === 'cluster-dfw');
     // ATL (5 members) should be larger than DFW (3 members)
     expect(atlCluster!.size!).toBeGreaterThan(dfwCluster!.size!);
   });
@@ -282,7 +282,7 @@ describe('clusterByZoom clustering', () => {
       makeRestaurant(`rest-big-${String(i).padStart(3, '0')}`, 33 + i * 0.005, -84),
     );
     const result = clusterByZoom(bigGroup, [], farZoom);
-    const cluster = result.dataPoints.find((p) => p.id === 'cluster-big');
+    const cluster = result.dataPoints.find((p: DataPoint) => p.id === 'cluster-big');
     expect(cluster!.size!).toBeLessThanOrEqual(LOD_CLUSTER_MAX_SIZE);
   });
 
@@ -319,20 +319,20 @@ describe('clusterByZoom arc merging', () => {
   it('merges arcs from same DC to same cluster into one', () => {
     const result = clusterByZoom(allPoints, arcs, farZoom);
     // 3 arcs to ATL restaurants → 1 merged arc to cluster-atl
-    const clusterArcs = result.arcsData.filter((a) => a.destId === 'cluster-atl');
+    const clusterArcs = result.arcsData.filter((a: ArcData) => a.destId === 'cluster-atl');
     expect(clusterArcs).toHaveLength(1);
   });
 
   it('merged arc has summed stroke width', () => {
     const result = clusterByZoom(allPoints, arcs, farZoom);
-    const merged = result.arcsData.find((a) => a.destId === 'cluster-atl');
+    const merged = result.arcsData.find((a: ArcData) => a.destId === 'cluster-atl');
     expect(merged!.strokeWidth).toBeCloseTo(0.04 + 0.05 + 0.03, 4);
   });
 
   it('merged arc endpoints point to cluster centroid', () => {
     const result = clusterByZoom(allPoints, arcs, farZoom);
-    const merged = result.arcsData.find((a) => a.destId === 'cluster-atl');
-    const cluster = result.dataPoints.find((p) => p.id === 'cluster-atl');
+    const merged = result.arcsData.find((a: ArcData) => a.destId === 'cluster-atl');
+    const cluster = result.dataPoints.find((p: DataPoint) => p.id === 'cluster-atl');
     expect(merged!.endLat).toBeCloseTo(cluster!.lat, 4);
     expect(merged!.endLng).toBeCloseTo(cluster!.lng, 4);
   });
@@ -343,7 +343,7 @@ describe('clusterByZoom arc merging', () => {
     const pts = [...allPoints, loner];
     const result = clusterByZoom(pts, [...arcs, lonerArc], farZoom);
 
-    const neArc = result.arcsData.find((a) => a.destId === 'rest-ne-001');
+    const neArc = result.arcsData.find((a: ArcData) => a.destId === 'rest-ne-001');
     expect(neArc).toBeDefined();
     expect(neArc!.endLat).toBe(40.76);
   });
@@ -437,7 +437,7 @@ describe('clusterByZoom edge cases', () => {
       { ...makeRestaurant('rest-atl-003', 33.75, -84.39), color: '#0000FF' },
     ];
     const result = clusterByZoom(points, [], 200);
-    const cluster = result.dataPoints.find((p) => p.id === 'cluster-atl');
+    const cluster = result.dataPoints.find((p: DataPoint) => p.id === 'cluster-atl');
     expect(cluster!.color).toBe('#FF0000');
   });
 });

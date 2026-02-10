@@ -16,6 +16,7 @@ import {
   supplierToDcRoutes,
   dcToRestaurantRoutes,
 } from './supplyChainRoutes';
+import type { Location, SupplyRoute } from '../components/Globe/types';
 
 // ── Location data integrity ─────────────────────────────────────────────
 
@@ -27,7 +28,7 @@ describe('supplyChainLocations data integrity', () => {
   });
 
   it('all location IDs are unique', () => {
-    const ids = allLocations.map((l) => l.id);
+    const ids = allLocations.map((l: Location) => l.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -97,7 +98,7 @@ describe('supplyChainLocations data integrity', () => {
 // ── Route data integrity ─────────────────────────────────────────────────
 
 describe('supplyChainRoutes data integrity', () => {
-  const locationIds = new Set(allLocations.map((l) => l.id));
+  const locationIds = new Set(allLocations.map((l: Location) => l.id));
 
   it('allRoutes is the union of supplier-to-DC and DC-to-restaurant routes', () => {
     expect(allRoutes.length).toBe(
@@ -106,7 +107,7 @@ describe('supplyChainRoutes data integrity', () => {
   });
 
   it('all route IDs are unique', () => {
-    const ids = allRoutes.map((r) => r.id);
+    const ids = allRoutes.map((r: SupplyRoute) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -135,7 +136,7 @@ describe('supplyChainRoutes data integrity', () => {
   });
 
   it('supplier-to-DC routes connect supplier to DC', () => {
-    const locationMap = new Map(allLocations.map((l) => [l.id, l]));
+    const locationMap = new Map(allLocations.map((l: Location) => [l.id, l]));
     for (const route of supplierToDcRoutes) {
       const source = locationMap.get(route.sourceId);
       const dest = locationMap.get(route.destId);
@@ -145,7 +146,7 @@ describe('supplyChainRoutes data integrity', () => {
   });
 
   it('DC-to-restaurant routes connect DC to restaurant', () => {
-    const locationMap = new Map(allLocations.map((l) => [l.id, l]));
+    const locationMap = new Map(allLocations.map((l: Location) => [l.id, l]));
     for (const route of dcToRestaurantRoutes) {
       const source = locationMap.get(route.sourceId);
       const dest = locationMap.get(route.destId);
@@ -161,14 +162,14 @@ describe('supplyChainRoutes data integrity', () => {
   });
 
   it('every DC is served by at least one supplier', () => {
-    const servedDCs = new Set(supplierToDcRoutes.map((r) => r.destId));
+    const servedDCs = new Set(supplierToDcRoutes.map((r: SupplyRoute) => r.destId));
     for (const dc of distributionCenters) {
       expect(servedDCs.has(dc.id)).toBe(true);
     }
   });
 
   it('every DC serves at least one restaurant', () => {
-    const servingDCs = new Set(dcToRestaurantRoutes.map((r) => r.sourceId));
+    const servingDCs = new Set(dcToRestaurantRoutes.map((r: SupplyRoute) => r.sourceId));
     for (const dc of distributionCenters) {
       expect(servingDCs.has(dc.id)).toBe(true);
     }

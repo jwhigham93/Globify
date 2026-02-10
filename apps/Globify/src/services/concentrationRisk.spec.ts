@@ -9,7 +9,7 @@ import {
   computeNetworkHHI,
   computeNetworkRiskMetrics,
 } from './concentrationRisk';
-import type { Location, SupplyRoute } from '../components/Globe/types';
+import type { Location, SupplyRoute, SupplierRiskScore, DCDiversificationScore } from '../components/Globe/types';
 
 // Test fixtures
 const mockLocations: Location[] = [
@@ -69,7 +69,7 @@ describe('computeSupplierRiskScores', () => {
   it('identifies a dominant supplier as high risk', () => {
     const scores = computeSupplierRiskScores(dominantRoutes, mockLocations);
 
-    const dominant = scores.find((s) => s.supplierId === 'sup-a');
+    const dominant = scores.find((s: SupplierRiskScore) => s.supplierId === 'sup-a');
     expect(dominant).toBeDefined();
     expect(dominant!.riskScore).toBe(80); // 8000/10000 * 100
     expect(dominant!.riskLevel).toBe('high');
@@ -108,7 +108,7 @@ describe('computeDCDiversification', () => {
       { id: 'r1', sourceId: 'sup-a', destId: 'dc-2', routeType: 'supplier_to_dc', volume: 3000, isActive: true },
     ];
     const scores = computeDCDiversification(singleSupplierRoutes, mockLocations);
-    const dc2 = scores.find((d) => d.dcId === 'dc-2');
+    const dc2 = scores.find((d: DCDiversificationScore) => d.dcId === 'dc-2');
     expect(dc2).toBeDefined();
     expect(dc2!.diversificationScore).toBe(0);
     expect(dc2!.supplierCount).toBe(1);
@@ -121,7 +121,7 @@ describe('computeDCDiversification', () => {
       { id: 'r3', sourceId: 'sup-c', destId: 'dc-1', routeType: 'supplier_to_dc', volume: 1000, isActive: true },
     ];
     const scores = computeDCDiversification(evenRoutes, mockLocations);
-    const dc1 = scores.find((d) => d.dcId === 'dc-1');
+    const dc1 = scores.find((d: DCDiversificationScore) => d.dcId === 'dc-1');
     expect(dc1).toBeDefined();
     expect(dc1!.diversificationScore).toBe(100); // Perfect entropy
     expect(dc1!.supplierCount).toBe(3);
@@ -134,14 +134,14 @@ describe('computeDCDiversification', () => {
       { id: 'r3', sourceId: 'sup-c', destId: 'dc-1', routeType: 'supplier_to_dc', volume: 500, isActive: true },
     ];
     const scores = computeDCDiversification(unevenRoutes, mockLocations);
-    const dc1 = scores.find((d) => d.dcId === 'dc-1');
+    const dc1 = scores.find((d: DCDiversificationScore) => d.dcId === 'dc-1');
     expect(dc1).toBeDefined();
     expect(dc1!.diversificationScore).toBeLessThan(50);
   });
 
   it('includes supplier breakdown sorted by volume share', () => {
     const scores = computeDCDiversification(balancedRoutes, mockLocations);
-    const dc1 = scores.find((d) => d.dcId === 'dc-1');
+    const dc1 = scores.find((d: DCDiversificationScore) => d.dcId === 'dc-1');
     expect(dc1).toBeDefined();
     expect(dc1!.supplierBreakdown).toHaveLength(2);
     // First entry should have >= second entry volume share

@@ -49,7 +49,7 @@ const sampleArcs: ArcData[] = [
 describe('applyDisruptionToPoints', () => {
   it('mutes all points to base steel-grey when nothing disabled', () => {
     const result = applyDisruptionToPoints(samplePoints, new Set(), new Set(), new Set());
-    result.forEach((p) => {
+    result.forEach((p: DataPoint) => {
       expect(p.color).toBe(DISRUPTION_BASE_NODE_COLOR);
     });
   });
@@ -61,7 +61,7 @@ describe('applyDisruptionToPoints', () => {
       new Set(),
       new Set()
     );
-    const dcPoint = result.find((p) => p.id === 'dc-a');
+    const dcPoint = result.find((p: DataPoint) => p.id === 'dc-a');
     expect(dcPoint?.color).toBe(DISABLED_NODE_COLOR);
   });
 
@@ -72,7 +72,7 @@ describe('applyDisruptionToPoints', () => {
       new Set(['rest-1']),
       new Set()
     );
-    const orphan = result.find((p) => p.id === 'rest-1');
+    const orphan = result.find((p: DataPoint) => p.id === 'rest-1');
     expect(orphan?.color).toBe(ORPHAN_HIGHLIGHT_COLOR);
   });
 
@@ -84,10 +84,10 @@ describe('applyDisruptionToPoints', () => {
       new Set()
     );
     // Supplier is not disabled or orphaned → base muted
-    const supplier = result.find((p) => p.id === 'sup-1');
+    const supplier = result.find((p: DataPoint) => p.id === 'sup-1');
     expect(supplier?.color).toBe(DISRUPTION_BASE_NODE_COLOR);
     // rest-2 is not orphaned → base muted
-    const rest2 = result.find((p) => p.id === 'rest-2');
+    const rest2 = result.find((p: DataPoint) => p.id === 'rest-2');
     expect(rest2?.color).toBe(DISRUPTION_BASE_NODE_COLOR);
   });
 
@@ -112,7 +112,7 @@ describe('applyDisruptionToPoints', () => {
       new Set(['dc-a']),
       new Set()
     );
-    const dc = result.find((p) => p.id === 'dc-a');
+    const dc = result.find((p: DataPoint) => p.id === 'dc-a');
     expect(dc?.color).toBe(DISABLED_NODE_COLOR);
   });
 
@@ -123,7 +123,7 @@ describe('applyDisruptionToPoints', () => {
       new Set(),
       new Set(['rest-2'])
     );
-    const partial = result.find((p) => p.id === 'rest-2');
+    const partial = result.find((p: DataPoint) => p.id === 'rest-2');
     expect(partial?.color).toBe(PARTIAL_SUPPLY_NODE_COLOR);
   });
 
@@ -134,7 +134,7 @@ describe('applyDisruptionToPoints', () => {
       new Set(['rest-1']),
       new Set(['rest-1'])
     );
-    const point = result.find((p) => p.id === 'rest-1');
+    const point = result.find((p: DataPoint) => p.id === 'rest-1');
     expect(point?.color).toBe(ORPHAN_HIGHLIGHT_COLOR);
   });
 });
@@ -144,31 +144,31 @@ describe('applyDisruptionToPoints', () => {
 describe('applyDisruptionToArcs', () => {
   it('mutes all arcs to base grey when nothing disabled', () => {
     const result = applyDisruptionToArcs(sampleArcs, new Set(), new Set());
-    result.forEach((arc) => {
+    result.forEach((arc: ArcData) => {
       expect(arc.color).toEqual(DISRUPTION_BASE_ARC_COLOR);
     });
   });
 
   it('highlights arcs where source is disabled in red', () => {
     const result = applyDisruptionToArcs(sampleArcs, new Set(['sup-1']), new Set());
-    const arc = result.find((a) => a.label === 'Sup1 → DCA');
+    const arc = result.find((a: ArcData) => a.label === 'Sup1 → DCA');
     expect(arc?.color).toEqual(DISRUPTED_ARC_COLOR);
   });
 
   it('highlights arcs where dest is disabled in red', () => {
     const result = applyDisruptionToArcs(sampleArcs, new Set(['dc-a']), new Set());
     // sup-1 → dc-a: dc-a is dest → red
-    const supArc = result.find((a) => a.label === 'Sup1 → DCA');
+    const supArc = result.find((a: ArcData) => a.label === 'Sup1 → DCA');
     expect(supArc?.color).toEqual(DISRUPTED_ARC_COLOR);
     // dc-a → rest-1: dc-a is source → red
-    const restArc = result.find((a) => a.label === 'DCA → Rest1');
+    const restArc = result.find((a: ArcData) => a.label === 'DCA → Rest1');
     expect(restArc?.color).toEqual(DISRUPTED_ARC_COLOR);
   });
 
   it('mutes unrelated arcs to base grey', () => {
     const result = applyDisruptionToArcs(sampleArcs, new Set(['sup-1']), new Set());
     // Only the sup-1→dc-a arc is disrupted; dc-a→rest arcs are muted
-    const restArc = result.find((a) => a.label === 'DCA → Rest1');
+    const restArc = result.find((a: ArcData) => a.label === 'DCA → Rest1');
     expect(restArc?.color).toEqual(DISRUPTION_BASE_ARC_COLOR);
   });
 
@@ -186,21 +186,21 @@ describe('applyDisruptionToArcs', () => {
   it('colours surviving arcs to partially served restaurants in orange', () => {
     // dc-a is NOT disabled, rest-2 is partially served
     const result = applyDisruptionToArcs(sampleArcs, new Set(), new Set(['rest-2']));
-    const arc = result.find((a) => a.label === 'DCA → Rest2');
+    const arc = result.find((a: ArcData) => a.label === 'DCA → Rest2');
     expect(arc?.color).toEqual(PARTIAL_SUPPLY_ARC_COLOR);
   });
 
   it('red (broken) takes priority over orange (degraded) for same arc', () => {
     // dc-a disabled AND rest-2 partially served — broken arc wins
     const result = applyDisruptionToArcs(sampleArcs, new Set(['dc-a']), new Set(['rest-2']));
-    const arc = result.find((a) => a.label === 'DCA → Rest2');
+    const arc = result.find((a: ArcData) => a.label === 'DCA → Rest2');
     expect(arc?.color).toEqual(DISRUPTED_ARC_COLOR);
   });
 
   it('only colours dc_to_restaurant arcs as orange (not supplier arcs)', () => {
     // sup-1 → dc-a is supplier_to_dc type, rest-2 partial shouldn't affect it
     const result = applyDisruptionToArcs(sampleArcs, new Set(), new Set(['rest-2']));
-    const supArc = result.find((a) => a.label === 'Sup1 → DCA');
+    const supArc = result.find((a: ArcData) => a.label === 'Sup1 → DCA');
     expect(supArc?.color).toEqual(DISRUPTION_BASE_ARC_COLOR);
   });
 });

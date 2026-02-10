@@ -102,15 +102,15 @@ describe('getSelectionIds', () => {
 describe('applySelectionToPoints', () => {
   it('highlights selected node to white', () => {
     const result = applySelectionToPoints(points, mockSupplierEntity);
-    const selected = result.find((p) => p.id === 'sup-1');
+    const selected = result.find((p: DataPoint) => p.id === 'sup-1');
     expect(selected!.color).toBe(SELECTION_HIGHLIGHT_COLOR);
   });
 
   it('keeps original color for connected nodes', () => {
     const result = applySelectionToPoints(points, mockSupplierEntity);
     // dc-1 and dc-2 are connected to selected supplier
-    const dc1 = result.find((p) => p.id === 'dc-1');
-    const dc2 = result.find((p) => p.id === 'dc-2');
+    const dc1 = result.find((p: DataPoint) => p.id === 'dc-1');
+    const dc2 = result.find((p: DataPoint) => p.id === 'dc-2');
     expect(dc1!.color).toBe('#003e5f'); // original
     expect(dc2!.color).toBe('#003e5f'); // original
   });
@@ -118,19 +118,19 @@ describe('applySelectionToPoints', () => {
   it('dims non-connected nodes', () => {
     const result = applySelectionToPoints(points, mockSupplierEntity);
     // rest-1 and rest-2 are NOT connected to the selected supplier
-    const rest1 = result.find((p) => p.id === 'rest-1');
-    const rest2 = result.find((p) => p.id === 'rest-2');
+    const rest1 = result.find((p: DataPoint) => p.id === 'rest-1');
+    const rest2 = result.find((p: DataPoint) => p.id === 'rest-2');
     expect(rest1!.color).toBe(SELECTION_DIM_NODE_COLOR);
     expect(rest2!.color).toBe(SELECTION_DIM_NODE_COLOR);
   });
 
   it('highlights the DC and keeps both sides connected', () => {
     const result = applySelectionToPoints(points, mockDCEntity);
-    const dc = result.find((p) => p.id === 'dc-1');
-    const sup = result.find((p) => p.id === 'sup-1');
-    const rest1 = result.find((p) => p.id === 'rest-1');
-    const rest2 = result.find((p) => p.id === 'rest-2');
-    const dc2 = result.find((p) => p.id === 'dc-2');
+    const dc = result.find((p: DataPoint) => p.id === 'dc-1');
+    const sup = result.find((p: DataPoint) => p.id === 'sup-1');
+    const rest1 = result.find((p: DataPoint) => p.id === 'rest-1');
+    const rest2 = result.find((p: DataPoint) => p.id === 'rest-2');
+    const dc2 = result.find((p: DataPoint) => p.id === 'dc-2');
 
     expect(dc!.color).toBe(SELECTION_HIGHLIGHT_COLOR);      // selected
     expect(sup!.color).toBe('#FF9933');                       // connected (original)

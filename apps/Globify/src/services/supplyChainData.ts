@@ -149,7 +149,7 @@ export function transformToArcs(locations: Location[], routes: SupplyRoute[]): A
         routeType: route.routeType,
       };
     })
-    .filter((arc): arc is ArcData => arc !== null);
+    .filter((arc) => arc !== null) as ArcData[];
 }
 
 /**

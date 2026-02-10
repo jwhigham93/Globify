@@ -187,21 +187,21 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         .atmosphereAltitude(ATMOSPHERE_ALTITUDE)
         // Custom 3D markers per location type (cone/box/sphere)
         .objectsData(dataPoints)
-        .objectLat((d) => (d as DataPoint).lat)
-        .objectLng((d) => (d as DataPoint).lng)
-        .objectAltitude((d) => {
+        .objectLat((d: object) => (d as DataPoint).lat)
+        .objectLng((d: object) => (d as DataPoint).lng)
+        .objectAltitude((d: object) => {
           const point = d as DataPoint;
           return altitudeMap.get(point.id || '') || 0;
         })
-        .objectThreeObject((d) => createLocationMarker(d as DataPoint))
+        .objectThreeObject((d: object) => createLocationMarker(d as DataPoint))
         // Arc configuration for supply chain visualization
         .arcsData(arcsData)
-        .arcStartLat((d) => (d as ArcData).startLat)
-        .arcStartLng((d) => (d as ArcData).startLng)
-        .arcEndLat((d) => (d as ArcData).endLat)
-        .arcEndLng((d) => (d as ArcData).endLng)
-        .arcColor((d) => (d as ArcData).color)
-        .arcStroke((d) => (d as ArcData).strokeWidth)
+        .arcStartLat((d: object) => (d as ArcData).startLat)
+        .arcStartLng((d: object) => (d as ArcData).startLng)
+        .arcEndLat((d: object) => (d as ArcData).endLat)
+        .arcEndLng((d: object) => (d as ArcData).endLng)
+        .arcColor((d: object) => (d as ArcData).color)
+        .arcStroke((d: object) => (d as ArcData).strokeWidth)
         // Arc altitude based on distance - short arcs stay low, long arcs go higher
         .arcAltitudeAutoScale(0.3) // Scale factor for auto-calculated altitude
         .arcDashLength(ARC_DASH_LENGTH)

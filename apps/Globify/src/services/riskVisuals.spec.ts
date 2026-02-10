@@ -102,21 +102,21 @@ describe('applyRiskColorsToPoints', () => {
 
   it('changes supplier point color based on risk score', () => {
     const result = applyRiskColorsToPoints(mockPoints, mockMetrics, mockLocations);
-    const supplierPoint = result.find((p) => p.lat === 30 && p.lng === -90);
+    const supplierPoint = result.find((p: DataPoint) => p.lat === 30 && p.lng === -90);
     // Risk score 100 → should be red
     expect(supplierPoint!.color?.toLowerCase()).toBe(RISK_COLOR_HIGH.toLowerCase());
   });
 
   it('changes DC point color based on diversification score', () => {
     const result = applyRiskColorsToPoints(mockPoints, mockMetrics, mockLocations);
-    const dcPoint = result.find((p) => p.lat === 33 && p.lng === -84);
+    const dcPoint = result.find((p: DataPoint) => p.lat === 33 && p.lng === -84);
     // Diversification 0 → inverted to risk 100 → red
     expect(dcPoint!.color?.toLowerCase()).toBe(RISK_COLOR_HIGH.toLowerCase());
   });
 
   it('colors restaurant point based on serving DC risk', () => {
     const result = applyRiskColorsToPoints(mockPoints, mockMetrics, mockLocations);
-    const restPoint = result.find((p) => p.lat === 34 && p.lng === -83);
+    const restPoint = result.find((p: DataPoint) => p.lat === 34 && p.lng === -83);
     // DC diversification 0 → restaurant risk 100 → red
     expect(restPoint!.color?.toLowerCase()).toBe(RISK_COLOR_HIGH.toLowerCase());
   });

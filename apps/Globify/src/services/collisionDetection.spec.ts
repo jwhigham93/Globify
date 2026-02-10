@@ -16,12 +16,9 @@ function makePoint(
   overrides: Partial<DataPoint> & { id: string; lat: number; lng: number },
 ): DataPoint {
   return {
-    lat: overrides.lat,
-    lng: overrides.lng,
-    id: overrides.id,
-    label: overrides.label || overrides.id,
-    color: overrides.color || '#FFFFFF',
-    locationType: overrides.locationType || 'restaurant',
+    label: overrides.id,
+    color: '#FFFFFF',
+    locationType: 'restaurant',
     ...overrides,
   };
 }

@@ -21,7 +21,7 @@ import {
   ARC_MIN_STROKE,
   ARC_MAX_STROKE,
 } from '../components/Globe/constants';
-import type { Location, SupplyRoute } from '../components/Globe/types';
+import type { Location, SupplyRoute, DataPoint } from '../components/Globe/types';
 
 // ── Test fixtures ──────────────────────────────────────────────────────────
 
@@ -160,16 +160,16 @@ describe('transformToDataPoints', () => {
 
   it('preserves lat/lng from locations', () => {
     const points = transformToDataPoints(mockLocations);
-    const supplierPoint = points.find((p) => p.id === 'sup-1');
+    const supplierPoint = points.find((p: DataPoint) => p.id === 'sup-1');
     expect(supplierPoint!.lat).toBe(40);
     expect(supplierPoint!.lng).toBe(-90);
   });
 
   it('sets correct color by location type', () => {
     const points = transformToDataPoints(mockLocations);
-    const supplier = points.find((p) => p.id === 'sup-1');
-    const dc = points.find((p) => p.id === 'dc-1');
-    const restaurant = points.find((p) => p.id === 'rest-1');
+    const supplier = points.find((p: DataPoint) => p.id === 'sup-1');
+    const dc = points.find((p: DataPoint) => p.id === 'dc-1');
+    const restaurant = points.find((p: DataPoint) => p.id === 'rest-1');
 
     expect(supplier!.color).toBe(POINT_COLOR_SUPPLIER);
     expect(dc!.color).toBe(POINT_COLOR_DC);
@@ -178,9 +178,9 @@ describe('transformToDataPoints', () => {
 
   it('sets correct size by location type', () => {
     const points = transformToDataPoints(mockLocations);
-    const supplier = points.find((p) => p.id === 'sup-1');
-    const dc = points.find((p) => p.id === 'dc-1');
-    const restaurant = points.find((p) => p.id === 'rest-1');
+    const supplier = points.find((p: DataPoint) => p.id === 'sup-1');
+    const dc = points.find((p: DataPoint) => p.id === 'dc-1');
+    const restaurant = points.find((p: DataPoint) => p.id === 'rest-1');
 
     expect(supplier!.size).toBe(POINT_RADIUS_SUPPLIER);
     expect(dc!.size).toBe(POINT_RADIUS_DC);
@@ -194,15 +194,15 @@ describe('transformToDataPoints', () => {
 
   it('sets locationType from location type', () => {
     const points = transformToDataPoints(mockLocations);
-    const supplier = points.find((p) => p.id === 'sup-1');
+    const supplier = points.find((p: DataPoint) => p.id === 'sup-1');
     expect(supplier!.locationType).toBe('supplier');
   });
 
   it('assigns higher value to DCs than suppliers, and suppliers higher than restaurants', () => {
     const points = transformToDataPoints(mockLocations);
-    const supplier = points.find((p) => p.id === 'sup-1');
-    const dc = points.find((p) => p.id === 'dc-1');
-    const restaurant = points.find((p) => p.id === 'rest-1');
+    const supplier = points.find((p: DataPoint) => p.id === 'sup-1');
+    const dc = points.find((p: DataPoint) => p.id === 'dc-1');
+    const restaurant = points.find((p: DataPoint) => p.id === 'rest-1');
 
     expect(dc!.value).toBeGreaterThan(supplier!.value!);
     expect(supplier!.value).toBeGreaterThan(restaurant!.value!);

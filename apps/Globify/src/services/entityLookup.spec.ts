@@ -10,6 +10,7 @@ import {
   allLocations,
   allRoutes,
 } from './supplyChainData';
+import type { SupplyRoute } from '../components/Globe/types';
 
 describe('getLocationById', () => {
   it('returns a location for a valid supplier ID', () => {
@@ -40,7 +41,7 @@ describe('getOutboundRoutes', () => {
   it('returns outbound routes for a supplier', () => {
     const routes = getOutboundRoutes('sup-tyson');
     expect(routes.length).toBeGreaterThan(0);
-    routes.forEach((r) => {
+    routes.forEach((r: SupplyRoute) => {
       expect(r.sourceId).toBe('sup-tyson');
       expect(r.routeType).toBe('supplier_to_dc');
     });
@@ -49,7 +50,7 @@ describe('getOutboundRoutes', () => {
   it('returns outbound routes for a DC', () => {
     const routes = getOutboundRoutes('dc-atlanta');
     expect(routes.length).toBeGreaterThan(0);
-    routes.forEach((r) => {
+    routes.forEach((r: SupplyRoute) => {
       expect(r.sourceId).toBe('dc-atlanta');
       expect(r.routeType).toBe('dc_to_restaurant');
     });
@@ -69,7 +70,7 @@ describe('getInboundRoutes', () => {
   it('returns inbound routes for a DC', () => {
     const routes = getInboundRoutes('dc-atlanta');
     expect(routes.length).toBeGreaterThan(0);
-    routes.forEach((r) => {
+    routes.forEach((r: SupplyRoute) => {
       expect(r.destId).toBe('dc-atlanta');
       expect(r.routeType).toBe('supplier_to_dc');
     });
@@ -78,7 +79,7 @@ describe('getInboundRoutes', () => {
   it('returns inbound routes for a restaurant', () => {
     const routes = getInboundRoutes('rest-atl-001');
     expect(routes.length).toBeGreaterThan(0);
-    routes.forEach((r) => {
+    routes.forEach((r: SupplyRoute) => {
       expect(r.destId).toBe('rest-atl-001');
     });
   });
@@ -146,7 +147,7 @@ describe('buildSelectedEntity', () => {
 
     if (entity.type !== 'supplier') return;
 
-    const uniqueDCs = new Set(entity.outboundRoutes.map((r) => r.destId));
+    const uniqueDCs = new Set(entity.outboundRoutes.map((r: SupplyRoute) => r.destId));
     expect(entity.dcCount).toBe(uniqueDCs.size);
   });
 
@@ -156,8 +157,8 @@ describe('buildSelectedEntity', () => {
 
     if (entity.type !== 'dc') return;
 
-    const inboundSum = entity.inboundRoutes.reduce((s, r) => s + r.volume, 0);
-    const outboundSum = entity.outboundRoutes.reduce((s, r) => s + r.volume, 0);
+    const inboundSum = entity.inboundRoutes.reduce((s: number, r: SupplyRoute) => s + r.volume, 0);
+    const outboundSum = entity.outboundRoutes.reduce((s: number, r: SupplyRoute) => s + r.volume, 0);
     expect(entity.totalInboundVolume).toBe(inboundSum);
     expect(entity.totalOutboundVolume).toBe(outboundSum);
   });
