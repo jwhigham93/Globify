@@ -7,7 +7,16 @@
     "eas-build-post-install": "cd ../../ && node tools/scripts/eas-build-post-install.mjs . apps/Globify"
   },
   "nx": {
-    "name": "Globify"
+    "name": "Globify",
+    "targets": {
+      "serve": {
+        "options": {
+          "env": {
+            "NODE_OPTIONS": "--max-old-space-size=8192"
+          }
+        }
+      }
+    }
   },
   "dependencies": {
     "@expo/metro-config": "~54.0.12",
