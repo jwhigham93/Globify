@@ -132,3 +132,6 @@ npm-debug.*
 *.orig.*
 web-build/
 cache/
+
+#ai
+tmpclaude-*
