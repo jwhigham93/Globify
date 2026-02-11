@@ -44,14 +44,14 @@ test.describe('View Mode Cycling', () => {
 
     // Risk → Disruption
     await page.getByText('Risk View').click();
-    await expect(page.getByText('Disruption')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText('Disruption').first()).toBeVisible({ timeout: 3000 });
   });
 
   test('disruption hint appears in disruption mode', async ({ page }) => {
     // Standard → Risk → Disruption
     await page.getByText('Standard').click();
     await page.getByText('Risk View').click();
-    await expect(page.getByText('Disruption')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText('Disruption').first()).toBeVisible({ timeout: 3000 });
 
     // Instruction hint should be visible
     await expect(
@@ -63,7 +63,7 @@ test.describe('View Mode Cycling', () => {
     // Standard → Risk → Disruption
     await page.getByText('Standard').click();
     await page.getByText('Risk View').click();
-    await expect(page.getByText('Disruption')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText('Disruption').first()).toBeVisible({ timeout: 3000 });
 
     await expect(page.getByText('Healthy')).toBeVisible({ timeout: 3000 });
     await expect(page.getByText('Disabled')).toBeVisible();
@@ -74,8 +74,8 @@ test.describe('View Mode Cycling', () => {
     await page.getByText('Standard').click();
     await page.getByText('Risk View').click();
 
-    // Wait for Disruption to appear, then click the toggle text
-    const disruptionToggle = page.getByText('Disruption');
+    // Wait for Disruption to appear, then click the toggle button
+    const disruptionToggle = page.locator('[data-testid="view-mode-toggle"]');
     await expect(disruptionToggle).toBeVisible({ timeout: 3000 });
     await disruptionToggle.click();
 
@@ -89,6 +89,7 @@ test.describe('View Mode Cycling', () => {
 
     // Advance to disruption mode
     await page.getByText('Risk View').click();
+    await expect(page.getByText('Disruption').first()).toBeVisible({ timeout: 3000 });
     await expect(page.getByText('Network Risk')).not.toBeVisible({ timeout: 3000 });
   });
 });

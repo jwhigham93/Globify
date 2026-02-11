@@ -35,10 +35,10 @@ test.describe('Runtime Stability', () => {
     await expect(page.getByText('Risk View')).toBeVisible({ timeout: 3000 });
 
     await page.getByText('Risk View').click();
-    await expect(page.getByText('Disruption')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByText('Disruption').first()).toBeVisible({ timeout: 3000 });
 
-    await page.getByText('Disruption').click();
-    await expect(page.getByText('Standard')).toBeVisible({ timeout: 3000 });
+    await page.locator('[data-testid="view-mode-toggle"]').click();
+    await expect(page.getByText('Standard')).toBeVisible({ timeout: 5000 });
 
     expect(errors).toHaveLength(0);
   });

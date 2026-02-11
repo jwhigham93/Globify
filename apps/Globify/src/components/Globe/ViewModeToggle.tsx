@@ -49,6 +49,7 @@ export const ViewModeToggle: React.FC<ViewModeToggleProps> = ({ viewMode, onTogg
       ]}
       onPress={onToggle}
       activeOpacity={0.7}
+      testID="view-mode-toggle"
     >
       <Text style={toggleStyles.icon}>{getModeIcon(viewMode)}</Text>
       <Text style={[
