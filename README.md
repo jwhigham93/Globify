@@ -1,82 +1,129 @@
-# JwDev
+# Globify — Supply Chain Visualization
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+An Nx monorepo containing **Globify**, a React Native / Expo 3D globe app for visualizing global supply chains, and a **Go REST API** that serves supply chain data from PostgreSQL.
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is almost ready ✨.
+## Architecture
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/nx-api/expo?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+```
+apps/Globify/          React Native + Expo + Three.js globe visualization
+apps/Globify-e2e/      Playwright end-to-end tests
+services/supply-chain-api/   Go REST API (chi, pgx, sqlc, PostgreSQL 16)
+```
 
-## Finish your CI setup
+## Prerequisites
 
-[Click here to finish setting up your workspace!](https://cloud.nx.app/connect/udlyp7oMb6)
+| Tool | Version | Notes |
+|------|---------|-------|
+| Node.js | 18+ | `npm install` at repo root |
+| Go | 1.22+ | Only needed for full-stack mode |
+| Docker | 24+ | Only needed for full-stack mode (PostgreSQL) |
+| golang-migrate | latest | `go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest` |
 
+## Quick Start
 
-## Run tasks
+A root-level `Makefile` provides shortcuts for all common workflows. Run `make help` to see every target.
 
-To run the dev server for your app, use:
+### Mock Data Mode (no server needed)
+
+The fastest way to run Globify — uses built-in mock data, no database or API required:
 
 ```sh
+make dev
+# or equivalently:
 npx nx serve Globify
 ```
 
-To create a production bundle:
+### Full-Stack Local Mode (API + PostgreSQL)
+
+Runs the Go API against a local PostgreSQL instance while Globify connects to `http://localhost:8080`:
 
 ```sh
-npx nx build Globify
+make fullstack
 ```
 
-To see all available targets to run for a project, run:
+This single command will:
+1. Start PostgreSQL in Docker
+2. Run database migrations and seed data
+3. Start the Go API server on `:8080`
+4. Patch `app.json` to point at `localhost:8080`
+5. Start the Expo dev server
+
+To stop everything and restore mock-data defaults:
 
 ```sh
-npx nx show project Globify
+make stop
 ```
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+### Individual Targets
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+| Command | Description |
+|---------|-------------|
+| `make dev` | Start Globify with mock data (no server) |
+| `make api` | Start PostgreSQL + API only |
+| `make api-stop` | Stop PostgreSQL + API |
+| `make fullstack` | Start everything together |
+| `make stop` | Stop everything, restore mock-data config |
+| `make test` | Run all tests (JS unit + Go) |
+| `make test-e2e` | Run Playwright E2E tests |
+| `make help` | List all available targets |
 
-## Add new projects
+## Run Modes
 
-While you could add new projects to your workspace manually, you might want to leverage [Nx plugins](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) and their [code generation](https://nx.dev/features/generate-code?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) feature.
+Globify supports three run modes controlled by `app.json` > `expo.extra`:
 
-Use the plugin's generator to create new projects.
+| Mode | `API_BASE_URL` | `COGNITO_*` | Behaviour |
+|------|---------------|-------------|-----------|
+| **Mock data** | _(empty)_ | _(empty)_ | Uses bundled TypeScript mock data. No network calls. |
+| **Local API** | `http://localhost:8080` | _(empty)_ | Fetches from local Go API. Auth is bypassed. |
+| **Production** | `https://api.example.com` | _(set)_ | Fetches from deployed API. Cognito sign-in required. |
 
-To generate a new application, use:
+## Testing
 
 ```sh
-npx nx g @nx/expo:app demo
+# All JS unit tests (Jest, 261 tests)
+npx nx test Globify
+
+# Go API tests (39 tests)
+cd services/supply-chain-api && make test
+
+# E2E tests (Playwright, 63 tests)
+npx nx e2e Globify-e2e
+
+# Everything at once
+make test
 ```
 
-To generate a new library, use:
+## Project Structure
+
+### Globify (React Native / Expo)
+
+- `src/app/App.tsx` — Root component with auth & data loading
+- `src/app/AuthProvider.tsx` — Cognito auth context (bypassed when `isAuthEnabled` is false)
+- `src/app/SignInScreen.tsx` — Cognito sign-in UI
+- `src/components/Globe/GlobeVisualization.tsx` — Three.js globe renderer
+- `src/services/config.ts` — Runtime configuration from `app.json` extras
+- `src/services/apiClient.ts` — Typed HTTP client with JWT & retry
+- `src/services/authService.ts` — Cognito token management
+
+### Supply Chain API (Go)
+
+- `cmd/server/main.go` — Server entrypoint
+- `internal/api/` — HTTP handlers and router (chi)
+- `internal/auth/` — Cognito JWT middleware
+- `internal/db/` — PostgreSQL repository (pgx + sqlc)
+- `internal/models/` — Domain types
+- `internal/risk/` — Risk computation engine
+- `internal/disruption/` — Disruption simulation
+- `migrations/` — SQL migrations and seed data
+
+See [`services/supply-chain-api/README.md`](services/supply-chain-api/README.md) for full API documentation.
+
+## Nx Workspace
+
+This is an [Nx](https://nx.dev) monorepo. Useful commands:
 
 ```sh
-npx nx g @nx/react:lib mylib
+npx nx graph              # Visualize project dependencies
+npx nx show project Globify  # See available targets
+npx nx list               # List installed plugins
 ```
-
-You can use `npx nx list` to get a list of installed plugins. Then, run `npx nx list <plugin-name>` to learn about more specific capabilities of a particular plugin. Alternatively, [install Nx Console](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) to browse plugins and generators in your IDE.
-
-[Learn more about Nx plugins &raquo;](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) | [Browse the plugin registry &raquo;](https://nx.dev/plugin-registry?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Install Nx Console
-
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
-
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Useful links
-
-Learn more:
-
-- [Learn more about this workspace setup](https://nx.dev/nx-api/expo?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)

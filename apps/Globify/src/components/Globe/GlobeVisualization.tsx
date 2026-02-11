@@ -6,10 +6,10 @@
  * See: https://github.com/expo/expo/issues/30323
  */
 
-import React, { useState, useMemo, useCallback, Suspense } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef, Suspense } from 'react';
 import { View, Platform, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Canvas } from '@react-three/fiber';
-import type { GlobeVisualizationProps, ViewMode, DataPoint, SelectedEntity } from './types';
+import type { GlobeVisualizationProps, ViewMode, DataPoint, SelectedEntity, NetworkRiskMetrics, DisruptionMetrics } from './types';
 import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, CONTROLS_HINT_HIDE_DISTANCE } from './constants';
 import { styles } from './styles';
 import { LoadingFallback } from './LoadingFallback';
@@ -26,14 +26,27 @@ import { applyDisruptionToPoints, applyDisruptionToArcs } from '../../services/d
 import { allLocations, allRoutes, getLocationById, getInboundRoutes, buildSelectedEntity } from '../../services/supplyChainData';
 import { applySelectionToPoints, applySelectionToArcs } from '../../services/selectionHighlight';
 import { clusterByZoom, isClusterId, getClusterById, LOD_CLUSTER_CAMERA_THRESHOLD } from '../../services/lodClustering';
+import { config } from '../../services/config';
+import * as apiClient from '../../services/apiClient';
 
 /**
  * Main GlobeVisualization component
  * Works on both web and native platforms using React Three Fiber
  */
+/** Empty disruption metrics used as initial/default state */
+const EMPTY_DISRUPTION: DisruptionMetrics = {
+  disabledCount: 0,
+  disabledNodes: [],
+  affectedRouteCount: 0,
+  orphanedRestaurants: [],
+  partiallyServedRestaurants: [],
+};
+
 export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   dataPoints = [],
   arcsData = [],
+  locations: propLocations,
+  routes: propRoutes,
   onPointClick,
   onReady,
   onError,
@@ -41,6 +54,11 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   backgroundColor = '#000000',
   testID = 'globe-visualization',
 }) => {
+  // Use prop data if provided (API mode), else fall back to local mock data
+  const locations = propLocations ?? allLocations;
+  const routes = propRoutes ?? allRoutes;
+  const useApi = !config.isDevMode;
+
   const [error, setError] = useState<Error | null>(null);
   const [isTextureLoading, setIsTextureLoading] = useState(true);
   const [isStarsSpinning, setIsStarsSpinning] = useState(true);
@@ -54,17 +72,61 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
 
   const isMobile = Platform.OS !== 'web';
 
-  // Compute network risk metrics once (only depends on static route/location data)
-  const networkRiskMetrics = useMemo(
-    () => computeNetworkRiskMetrics(allRoutes, allLocations),
-    []
+  // ── Network Risk Metrics ─────────────────────────────────────────
+  const [networkRiskMetrics, setNetworkRiskMetrics] = useState<NetworkRiskMetrics>(
+    () => computeNetworkRiskMetrics(routes, locations)
   );
 
-  // Compute disruption metrics when nodes are disabled
-  const disruptionMetrics = useMemo(
-    () => computeDisruptionMetrics(disabledNodeIds, allRoutes, allLocations),
-    [disabledNodeIds]
-  );
+  useEffect(() => {
+    if (!useApi) {
+      setNetworkRiskMetrics(computeNetworkRiskMetrics(routes, locations));
+      return;
+    }
+    let cancelled = false;
+    apiClient.get<NetworkRiskMetrics>('/risk/network').then((metrics) => {
+      if (!cancelled) setNetworkRiskMetrics(metrics);
+    }).catch(() => {
+      // Fall back to local computation on error
+      if (!cancelled) setNetworkRiskMetrics(computeNetworkRiskMetrics(routes, locations));
+    });
+    return () => { cancelled = true; };
+  }, [useApi, routes, locations]);
+
+  // ── Disruption Metrics (debounced) ───────────────────────────────
+  const [disruptionMetrics, setDisruptionMetrics] = useState<DisruptionMetrics>(EMPTY_DISRUPTION);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (disabledNodeIds.size === 0) {
+      setDisruptionMetrics(EMPTY_DISRUPTION);
+      return;
+    }
+
+    if (!useApi) {
+      setDisruptionMetrics(computeDisruptionMetrics(disabledNodeIds, routes, locations));
+      return;
+    }
+
+    // Debounce 300ms for rapid toggles
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    let cancelled = false;
+    debounceTimerRef.current = setTimeout(() => {
+      const disabledNodes = Array.from(disabledNodeIds).map((id) => {
+        const loc = locations.find((l) => l.id === id);
+        return { id, type: loc?.type ?? 'dc' };
+      });
+      apiClient.post<DisruptionMetrics>('/disruption/simulate', { disabledNodes }).then((metrics) => {
+        if (!cancelled) setDisruptionMetrics(metrics);
+      }).catch(() => {
+        if (!cancelled) setDisruptionMetrics(computeDisruptionMetrics(disabledNodeIds, routes, locations));
+      });
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, [disabledNodeIds, useApi, routes, locations]);
 
   // Set of orphaned restaurant IDs for visual highlighting
   const orphanedIds = useMemo(
@@ -84,6 +146,18 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
     [dataPoints, arcsData, cameraDistance],
   );
 
+  // When zooming past the cluster threshold while a cluster is selected,
+  // clear the selection so individual markers appear normally (same as "Zoom to Expand").
+  useEffect(() => {
+    if (
+      selectedEntity &&
+      selectedEntity.type === 'cluster' &&
+      cameraDistance < LOD_CLUSTER_CAMERA_THRESHOLD
+    ) {
+      setSelectedEntity(null);
+    }
+  }, [cameraDistance, selectedEntity]);
+
   // Derive risk-colored arcs when in concentration-risk view
   const effectiveArcsData = useMemo(() => {
     if (viewMode === 'concentration-risk') {
@@ -98,13 +172,13 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   // Derive disruption-colored data points when in disruption view
   const effectiveDataPoints = useMemo(() => {
     if (viewMode === 'concentration-risk') {
-      return applyRiskColorsToPoints(lodDataPoints, networkRiskMetrics, allLocations);
+      return applyRiskColorsToPoints(lodDataPoints, networkRiskMetrics, locations);
     }
     if (viewMode === 'disruption') {
       return applyDisruptionToPoints(lodDataPoints, disabledNodeIds, orphanedIds, partiallyServedIds);
     }
     return lodDataPoints;
-  }, [viewMode, lodDataPoints, networkRiskMetrics, disabledNodeIds, orphanedIds, partiallyServedIds]);
+  }, [viewMode, lodDataPoints, networkRiskMetrics, disabledNodeIds, orphanedIds, partiallyServedIds, locations]);
 
   // Final pass: spotlight the selected entity and dim everything else
   const highlightedDataPoints = useMemo(() => {
@@ -150,6 +224,10 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
     setSelectedEntity(null);
   };
 
+  // Track the latest entity selection to ignore stale API responses
+  const latestSelectionRef = useRef<string | null>(null);
+  const [entityLoading, setEntityLoading] = useState(false);
+
   // Toggle a node's disabled state (only suppliers and DCs) in disruption mode,
   // or open the inspect panel in other modes.
   const handlePointClick = useCallback(
@@ -191,8 +269,8 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
             const dcSet = new Set<string>();
             let totalVolume = 0;
             for (const memberId of cluster.memberIds) {
-              const routes = getInboundRoutes(memberId);
-              for (const r of routes) {
+              const memberRoutes = getInboundRoutes(memberId);
+              for (const r of memberRoutes) {
                 totalVolume += r.volume;
                 const dc = getLocationById(r.sourceId);
                 if (dc) dcSet.add(dc.name);
@@ -219,17 +297,43 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
         return;
       }
 
-      const location = getLocationById(pointId);
-      if (!location) return;
+      // If same entity is already selected, close the panel
       setSelectedEntity((prev) => {
-        // If same entity is already selected, close the panel
         if (prev && prev.type !== 'route' && prev.location.id === pointId) {
+          latestSelectionRef.current = null;
           return null;
         }
-        return buildSelectedEntity(location);
+        return prev; // Will be replaced by API/local result below
+      });
+
+      // Check if we just toggled off
+      latestSelectionRef.current = pointId;
+
+      if (!useApi) {
+        // Dev mode — use local data
+        const location = getLocationById(pointId);
+        if (location) {
+          setSelectedEntity(buildSelectedEntity(location));
+        }
+        return;
+      }
+
+      // API mode — fetch entity detail
+      setEntityLoading(true);
+      apiClient.get<SelectedEntity>(`/entities/${pointId}`).then((entity) => {
+        // Ignore stale responses
+        if (latestSelectionRef.current !== pointId) return;
+        setSelectedEntity(entity);
+      }).catch(() => {
+        // Fall back to local on error
+        if (latestSelectionRef.current !== pointId) return;
+        const location = getLocationById(pointId);
+        if (location) setSelectedEntity(buildSelectedEntity(location));
+      }).finally(() => {
+        if (latestSelectionRef.current === pointId) setEntityLoading(false);
       });
     },
-    [viewMode]
+    [viewMode, useApi, locations]
   );
 
   // Reset all disruption state

@@ -16,5 +16,20 @@ services:
       timeout: 5s
       retries: 5
 
+  api:
+    build: .
+    container_name: supply-chain-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://supplychain:supplychain_dev@postgres:5432/supplychain?sslmode=disable
+      PORT: "8080"
+      ALLOWED_ORIGINS: "http://localhost:8081,http://localhost:19006"
+      LOG_FORMAT: json
+      # COGNITO_USER_POOL_ID and COGNITO_CLIENT_ID left empty for local dev (auth bypassed)
+    ports:
+      - "8080:8080"
+
 volumes:
   pgdata:
