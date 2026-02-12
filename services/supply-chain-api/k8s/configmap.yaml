@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: supply-chain-config
+  namespace: supply-chain
+  labels:
+    app.kubernetes.io/name: supply-chain-api
+    app.kubernetes.io/part-of: supply-chain-api
+data:
+  # Replace these values with actual CDK stack outputs after deployment
+  COGNITO_USER_POOL_ID: "<from SupplyChainAuth stack output: UserPoolId>"
+  COGNITO_CLIENT_ID: "<from SupplyChainAuth stack output: AppClientId>"
+  COGNITO_REGION: "us-east-1"
+  ALLOWED_ORIGINS: "https://your-app-domain.com"
+  LOG_FORMAT: "json"
+  PORT: "8080"

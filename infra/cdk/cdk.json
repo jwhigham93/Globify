@@ -1,0 +1,17 @@
+{
+  "app": "go mod download && go run main.go",
+  "watch": {
+    "include": ["**"],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "go.sum",
+      "**/*_test.go"
+    ]
+  },
+  "context": {
+    "profile": "ultra-lite",
+    "instanceClass": "db.t4g.micro",
+    "env": "dev"
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "name": "supply-chain-api",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "services/supply-chain-api",
+  "projectType": "application",
+  "tags": ["scope:backend", "lang:go"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["go build -o bin/server ./cmd/server"],
+        "cwd": "services/supply-chain-api"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["go test ./..."],
+        "cwd": "services/supply-chain-api"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["golangci-lint run ./..."],
+        "cwd": "services/supply-chain-api"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["go run ./cmd/server"],
+        "cwd": "services/supply-chain-api"
+      }
+    },
+    "docker-build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["docker build -t supply-chain-api ."],
+        "cwd": "services/supply-chain-api"
+      }
+    },
+    "db-up": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["docker compose up -d"],
+        "cwd": "services/supply-chain-api"
+      }
+    },
+    "db-down": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["docker compose down"],
+        "cwd": "services/supply-chain-api"
+      }
+    },
+    "migrate-up": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["migrate -path migrations -database \"postgres://supplychain:supplychain_dev@localhost:5432/supplychain?sslmode=disable\" up"],
+        "cwd": "services/supply-chain-api"
+      }
+    },
+    "migrate-down": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["migrate -path migrations -database \"postgres://supplychain:supplychain_dev@localhost:5432/supplychain?sslmode=disable\" down -all"],
+        "cwd": "services/supply-chain-api"
+      }
+    },
+    "sqlc-generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": ["sqlc generate"],
+        "cwd": "services/supply-chain-api"
+      }
+    }
+  }
+}

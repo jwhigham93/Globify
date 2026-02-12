@@ -11,7 +11,7 @@ test.describe('Globe Rendering', () => {
     await page.goto('/');
 
     // Wait for globe container to be visible (within 3 seconds per success criteria SC-001)
-    const globeContainer = page.locator('#globeViz');
+    const globeContainer = page.locator('[data-testid="globe-visualization"]');
     await expect(globeContainer).toBeVisible({ timeout: 3000 });
   });
 
@@ -22,7 +22,7 @@ test.describe('Globe Rendering', () => {
     await expect(page).toHaveTitle(/Globify/);
 
     // Globe visualization should be present
-    const globeElement = page.locator('[data-testid="main-globe"]');
+    const globeElement = page.locator('[data-testid="globe-visualization"]');
     await expect(globeElement).toBeAttached();
   });
 
@@ -39,7 +39,7 @@ test.describe('Globe Rendering', () => {
     await page.goto('/');
 
     // Wait for globe container to be visible
-    await page.locator('#globeViz').waitFor({ state: 'visible', timeout: 3000 });
+    await page.locator('[data-testid="globe-visualization"]').waitFor({ state: 'visible', timeout: 3000 });
 
     // Should not have any critical errors
     const criticalErrors = errors.filter(

@@ -2,7 +2,13 @@
   "name": "@jw-dev/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "dev": "npx nx serve Globify",
+    "test": "npx nx test Globify",
+    "test:e2e": "npx nx e2e Globify-e2e",
+    "set-api-url": "node -e \"const fs=require('fs');const f='apps/Globify/app.json';const j=JSON.parse(fs.readFileSync(f,'utf8'));j.expo.extra.API_BASE_URL='http://localhost:8080';fs.writeFileSync(f,JSON.stringify(j,null,2)+'\\n');console.log('API_BASE_URL → http://localhost:8080')\"",
+    "clear-api-url": "node -e \"const fs=require('fs');const f='apps/Globify/app.json';const j=JSON.parse(fs.readFileSync(f,'utf8'));j.expo.extra.API_BASE_URL='';fs.writeFileSync(f,JSON.stringify(j,null,2)+'\\n');console.log('API_BASE_URL → (empty, mock mode)')\""
+  },
   "private": true,
   "dependencies": {
     "@expo/metro-config": "~54.0.12",

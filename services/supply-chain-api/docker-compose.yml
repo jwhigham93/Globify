@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: supply-chain-db
+    environment:
+      POSTGRES_USER: supplychain
+      POSTGRES_PASSWORD: supplychain_dev
+      POSTGRES_DB: supplychain
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U supplychain"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: supply-chain-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://supplychain:supplychain_dev@postgres:5432/supplychain?sslmode=disable
+      PORT: "8080"
+      ALLOWED_ORIGINS: "http://localhost:8081,http://localhost:19006"
+      LOG_FORMAT: json
+      # COGNITO_USER_POOL_ID and COGNITO_CLIENT_ID left empty for local dev (auth bypassed)
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
