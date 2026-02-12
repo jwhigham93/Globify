@@ -1,0 +1,43 @@
+# ── Lambda-compatible container image ─────────────────────────
+# Uses the AWS Lambda Web Adapter to run the standard Go HTTP server
+# as a Lambda function with zero code changes.
+#
+# The adapter intercepts Lambda invoke events and forwards them as
+# HTTP requests to the server on port 8080.
+#
+# Build & push:
+#   docker build -f Dockerfile.lambda -t supply-chain-api:lambda .
+#   docker tag supply-chain-api:lambda ACCOUNT.dkr.ecr.REGION.amazonaws.com/supply-chain-api:lambda
+#   docker push ACCOUNT.dkr.ecr.REGION.amazonaws.com/supply-chain-api:lambda
+
+# ── Build stage ──────────────────────────────────────────────
+FROM golang:1.26-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o /server ./cmd/server
+
+# ── Lambda Web Adapter ───────────────────────────────────────
+FROM public.ecr.aws/awsguru/aws-lambda-web-adapter:0.8.4 AS adapter
+
+# ── Runtime stage (Lambda base image) ────────────────────────
+FROM public.ecr.aws/lambda/provided:al2023-arm64
+
+# Install the Lambda Web Adapter extension
+COPY --from=adapter /lambda-adapter /opt/extensions/lambda-adapter
+
+# Copy the API binary and migrations
+COPY --from=builder /server ${LAMBDA_TASK_ROOT}/server
+COPY --from=builder /app/migrations ${LAMBDA_TASK_ROOT}/migrations
+
+# Lambda Web Adapter settings
+ENV AWS_LWA_PORT=8080
+ENV PORT=8080
+
+# The handler — Lambda Web Adapter intercepts and proxies to this
+CMD ["./server"]

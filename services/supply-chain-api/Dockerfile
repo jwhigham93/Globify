@@ -14,6 +14,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /server ./cmd/server
 FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=builder /server /server
+COPY --from=builder /app/migrations /migrations
 
 EXPOSE 8080
 USER nonroot:nonroot
