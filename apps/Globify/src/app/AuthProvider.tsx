@@ -18,8 +18,8 @@ const AuthContext = createContext<AuthContextValue>({
   isAuthenticated: false,
   isLoading: true,
   token: null,
-  signIn: async () => {},
-  signOut: () => {},
+  signIn: async () => { /* noop default */ },
+  signOut: () => { /* noop default */ },
 });
 
 export const useAuth = () => useContext(AuthContext);

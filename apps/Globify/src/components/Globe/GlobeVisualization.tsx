@@ -70,6 +70,25 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   );
   const [zoomTarget, setZoomTarget] = useState<number | null>(null);
 
+  // Detect WebGL support on web so we fail fast instead of showing a stuck overlay
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const doc = (globalThis as any).document;
+      if (!doc) return;
+      const canvas = doc.createElement('canvas');
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+      if (!gl) {
+        setIsTextureLoading(false);
+        setError(new Error('WebGL is not supported in this browser'));
+      }
+    } catch {
+      setIsTextureLoading(false);
+      setError(new Error('WebGL is not supported in this browser'));
+    }
+  }, []);
+
   const isMobile = Platform.OS !== 'web';
 
   // ── Network Risk Metrics ─────────────────────────────────────────

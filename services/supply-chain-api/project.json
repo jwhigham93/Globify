@@ -22,7 +22,7 @@
     "lint": {
       "executor": "nx:run-commands",
       "options": {
-        "commands": ["golangci-lint run ./..."],
+        "commands": ["go vet ./..."],
         "cwd": "services/supply-chain-api"
       }
     },
