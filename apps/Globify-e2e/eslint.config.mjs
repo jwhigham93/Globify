@@ -5,6 +5,9 @@ export default [
   playwright.configs['flat/recommended'],
   ...baseConfig,
   {
+    ignores: ['out-tsc/**'],
+  },
+  {
     files: ['**/*.ts', '**/*.js'],
     // Override or add rules here
     rules: {},
