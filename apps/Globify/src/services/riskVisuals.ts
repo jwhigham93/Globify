@@ -18,6 +18,7 @@ import {
   RISK_THRESHOLD_LOW,
   RISK_THRESHOLD_HIGH,
 } from '../components/Globe/constants';
+import { isClusterId, getClusterById } from './lodClustering';
 
 /**
  * Linearly interpolate between two hex colors.
@@ -99,6 +100,19 @@ export function applyRiskColorsToPoints(
   return dataPoints.map((point) => {
     const coordKey = `${point.lat},${point.lng}`;
     const location = locationByCoords.get(coordKey);
+
+    // Cluster markers — use the worst (highest) risk score among members
+    if (point.id && isClusterId(point.id)) {
+      const cluster = getClusterById(point.id);
+      if (cluster) {
+        let worstScore = 0;
+        for (const memberId of cluster.memberIds) {
+          const score = restaurantRiskMap.get(memberId);
+          if (score !== undefined && score > worstScore) worstScore = score;
+        }
+        return { ...point, color: riskScoreToColor(worstScore) };
+      }
+    }
 
     if (!location) return point;
 

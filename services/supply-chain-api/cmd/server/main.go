@@ -17,6 +17,7 @@ import (
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/api"
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/auth"
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/db"
+	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/ws"
 )
 
 func main() {
@@ -41,8 +42,12 @@ func main() {
 	// ── Auth config ──────────────────────────────────────────────────
 	authCfg := auth.ConfigFromEnv()
 
+	// ── WebSocket hub ────────────────────────────────────────────────
+	hub := ws.NewHub()
+	go hub.Run()
+
 	// ── Router ───────────────────────────────────────────────────────
-	router := api.NewRouter(pool, authCfg)
+	router := api.NewRouter(pool, authCfg, hub)
 
 	// ── Server ───────────────────────────────────────────────────────
 	port := os.Getenv("PORT")
@@ -82,6 +87,7 @@ func main() {
 	defer cancel()
 
 	log.Info().Msg("shutting down gracefully…")
+	hub.Shutdown()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error().Err(err).Msg("forced shutdown")
 	}

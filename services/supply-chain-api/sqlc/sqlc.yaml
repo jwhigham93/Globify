@@ -5,6 +5,7 @@ sql:
     schema:
       - "../migrations/000001_initial_schema.up.sql"
       - "../migrations/000002_seed_data.up.sql"
+      - "../migrations/000003_vehicles_schema.up.sql"
     gen:
       go:
         package: "db"

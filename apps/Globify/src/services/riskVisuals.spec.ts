@@ -13,6 +13,17 @@ import {
   RISK_COLOR_HIGH,
 } from '../components/Globe/constants';
 
+// Mock lodClustering for cluster tests
+jest.mock('./lodClustering', () => ({
+  isClusterId: (id: string) => id.startsWith('cluster-'),
+  getClusterById: (id: string) => {
+    if (id === 'cluster-atl') {
+      return { id: 'cluster-atl', memberIds: ['rest-1', 'rest-2'], size: 2, lat: 34, lng: -83, metro: 'atl' };
+    }
+    return null;
+  },
+}));
+
 describe('riskScoreToColor', () => {
   it('returns green for score 0', () => {
     const color = riskScoreToColor(0);
@@ -129,5 +140,32 @@ describe('applyRiskColorsToPoints', () => {
       expect(result[i].label).toBe(mockPoints[i].label);
       expect(result[i].size).toBe(mockPoints[i].size);
     }
+  });
+
+  // ── Cluster coloring ──────────────────────────────────────────────────
+
+  it('colours cluster by worst member risk score', () => {
+    const clusterPoints: DataPoint[] = [
+      { id: 'cluster-atl', lat: 34, lng: -83, color: '#ccc', size: 0.06 },
+    ];
+    // rest-1 has riskScore 100 (high) via mockMetrics
+    const result = applyRiskColorsToPoints(clusterPoints, mockMetrics, mockLocations);
+    expect(result[0].color?.toLowerCase()).toBe(RISK_COLOR_HIGH.toLowerCase());
+  });
+
+  it('colours cluster green when no member has risk data', () => {
+    const clusterPoints: DataPoint[] = [
+      { id: 'cluster-atl', lat: 34, lng: -83, color: '#ccc', size: 0.06 },
+    ];
+    // Empty metrics — no restaurant risks
+    const emptyMetrics: NetworkRiskMetrics = {
+      networkDiversificationScore: 100,
+      hhi: 0,
+      supplierRisks: [],
+      dcDiversification: [],
+      restaurantRisks: [],
+    };
+    const result = applyRiskColorsToPoints(clusterPoints, emptyMetrics, mockLocations);
+    expect(result[0].color?.toLowerCase()).toBe(RISK_COLOR_LOW.toLowerCase());
   });
 });

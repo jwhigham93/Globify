@@ -118,6 +118,9 @@ test-output
 vite.config.*.timestamp*
 vitest.config.*.timestamp*
 
+# Processed NASA tiles (large, generated locally)
+/tiles/
+
 # Expo
 node_modules/
 .expo/

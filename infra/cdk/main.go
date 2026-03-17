@@ -129,6 +129,15 @@ func main() {
 		CloudFrontWebAclArn: cfWebAclArn,
 	})
 
+	// ── 7b. Tile Hosting — disabled pending visual quality improvements
+	// stacks.NewTileHostingStack(app, "GlobifyTileHosting", &stacks.TileHostingStackProps{
+	// 	StackProps: awscdk.StackProps{
+	// 		Env:         env,
+	// 		Description: jsii.String("Globify — S3 + CloudFront NASA tile imagery CDN"),
+	// 	},
+	// 	CloudFrontWebAclArn: cfWebAclArn,
+	// })
+
 	// ── 8. Budget alarm (all profiles, different limits) ────────
 	budgetLimit := 250.0
 	switch profile {

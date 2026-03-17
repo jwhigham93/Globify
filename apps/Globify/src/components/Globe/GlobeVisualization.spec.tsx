@@ -46,6 +46,9 @@ jest.mock('three-globe', () => {
     arcDashAnimateTime: jest.fn().mockReturnThis(),
     arcAltitudeAutoScale: jest.fn().mockReturnThis(),
     onGlobeReady: jest.fn().mockReturnThis(),
+    customLayerData: jest.fn().mockReturnThis(),
+    customThreeObject: jest.fn().mockReturnThis(),
+    customThreeObjectUpdate: jest.fn().mockReturnThis(),
     pointsData: jest.fn().mockReturnThis(),
     pointAltitude: jest.fn().mockReturnThis(),
     pointRadius: jest.fn().mockReturnThis(),
@@ -70,6 +73,11 @@ jest.mock('three/examples/jsm/controls/OrbitControls.js', () => ({
     update: jest.fn(),
     dispose: jest.fn(),
   })),
+}));
+
+// Mock useVehiclePositions hook
+jest.mock('../../services/useVehiclePositions', () => ({
+  useVehiclePositions: () => ({ positions: new Map(), connected: false }),
 }));
 
 describe('GlobeVisualization Component', () => {

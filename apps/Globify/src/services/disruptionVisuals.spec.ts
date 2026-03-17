@@ -17,6 +17,17 @@ import {
   PARTIAL_SUPPLY_ARC_COLOR,
 } from '../components/Globe/constants';
 
+// Mock lodClustering for cluster tests
+jest.mock('./lodClustering', () => ({
+  isClusterId: (id: string) => id.startsWith('cluster-'),
+  getClusterById: (id: string) => {
+    if (id === 'cluster-atl') {
+      return { id: 'cluster-atl', memberIds: ['rest-1', 'rest-2'], size: 2, lat: 33, lng: -84, metro: 'atl' };
+    }
+    return null;
+  },
+}));
+
 // ── Test fixtures ──────────────────────────────────────────────────────────
 
 const samplePoints: DataPoint[] = [
@@ -136,6 +147,62 @@ describe('applyDisruptionToPoints', () => {
     );
     const point = result.find((p: DataPoint) => p.id === 'rest-1');
     expect(point?.color).toBe(ORPHAN_HIGHLIGHT_COLOR);
+  });
+
+  // ── Cluster coloring ──────────────────────────────────────────────────
+
+  it('colours cluster red when any member is orphaned', () => {
+    const clusterPoints: DataPoint[] = [
+      { id: 'cluster-atl', lat: 33, lng: -84, color: '#E60E33', locationType: 'restaurant' },
+    ];
+    // rest-1 is a member of cluster-atl (per mock above)
+    const result = applyDisruptionToPoints(
+      clusterPoints,
+      new Set(),
+      new Set(['rest-1']),
+      new Set()
+    );
+    expect(result[0].color).toBe(ORPHAN_HIGHLIGHT_COLOR);
+  });
+
+  it('colours cluster orange when any member is partially served', () => {
+    const clusterPoints: DataPoint[] = [
+      { id: 'cluster-atl', lat: 33, lng: -84, color: '#E60E33', locationType: 'restaurant' },
+    ];
+    const result = applyDisruptionToPoints(
+      clusterPoints,
+      new Set(),
+      new Set(),
+      new Set(['rest-2'])
+    );
+    expect(result[0].color).toBe(PARTIAL_SUPPLY_NODE_COLOR);
+  });
+
+  it('colours cluster base when no members affected', () => {
+    const clusterPoints: DataPoint[] = [
+      { id: 'cluster-atl', lat: 33, lng: -84, color: '#E60E33', locationType: 'restaurant' },
+    ];
+    const result = applyDisruptionToPoints(
+      clusterPoints,
+      new Set(),
+      new Set(),
+      new Set()
+    );
+    expect(result[0].color).toBe(DISRUPTION_BASE_NODE_COLOR);
+  });
+
+  it('orphaned member takes priority over partial member in cluster', () => {
+    const clusterPoints: DataPoint[] = [
+      { id: 'cluster-atl', lat: 33, lng: -84, color: '#E60E33', locationType: 'restaurant' },
+    ];
+    // rest-1 orphaned AND rest-2 partial → orphaned wins
+    const result = applyDisruptionToPoints(
+      clusterPoints,
+      new Set(),
+      new Set(['rest-1']),
+      new Set(['rest-2'])
+    );
+    expect(result[0].color).toBe(ORPHAN_HIGHLIGHT_COLOR);
   });
 });
 
