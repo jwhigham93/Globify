@@ -302,6 +302,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         .arcsTransitionDuration(0) // Instant update for zoom-based stroke scaling
         // Route polyline for selected truck
         .pathsData([])
+        .pathPoints('pnts')
         .pathPointLat('lat')
         .pathPointLng('lng')
         .pathPointAlt(ROUTE_PATH_ALTITUDE)

@@ -333,6 +333,16 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
     return effectiveArcsData;
   }, [effectiveArcsData, selectedEntity, selectedTruckId]);
 
+  // When a truck is selected, show only that truck (hide others)
+  const isolatedVehiclePositions = useMemo(() => {
+    if (!selectedTruckId || !vehiclePositions) return vehiclePositions;
+    const selected = vehiclePositions.get(selectedTruckId);
+    if (!selected) return vehiclePositions;
+    const filtered = new Map<string, typeof selected>();
+    filtered.set(selectedTruckId, selected);
+    return filtered;
+  }, [vehiclePositions, selectedTruckId]);
+
   const handleError = (err: Error) => {
     setError(err);
     onError?.(err);
@@ -548,7 +558,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
             zoomTarget={zoomTarget}
             onZoomTargetReached={handleZoomTargetReached}
             tileCdnUrl={config.resolvedTileCdnUrl}
-            vehiclePositions={vehiclePositions}
+            vehiclePositions={isolatedVehiclePositions}
             showTrucks={showTrucks}
             onTruckClick={handleTruckClick}
             routePathData={routePathData}
