@@ -154,12 +154,10 @@ export const TRUCK_LIVE_THRESHOLD_MS = 5 * 60 * 1000;    // 5 minutes
 export const TRUCK_STALE_THRESHOLD_MS = 15 * 60 * 1000;  // 15 minutes
 
 // Route polyline — path segments when a truck is selected
-export const ROUTE_PATH_COMPLETED_COLOR = 'rgba(51, 204, 102, 0.35)';
-export const ROUTE_PATH_REMAINING_COLOR = 'rgba(51, 204, 102, 0.85)';
-export const ROUTE_PATH_COMPLETED_STROKE = 0.6;
-export const ROUTE_PATH_REMAINING_STROKE = 1.0;
+export const ROUTE_PATH_COMPLETED_STROKE = 1.2;
+export const ROUTE_PATH_REMAINING_STROKE = 1.8;
 export const ROUTE_PATH_ALTITUDE = 0.005;
-export const ROUTE_PATH_DASH_LENGTH = 0.3;
-export const ROUTE_PATH_DASH_GAP = 0.15;
-export const ROUTE_PATH_ANIMATE_TIME = 4000;
+export const ROUTE_PATH_DASH_LENGTH = 1;
+export const ROUTE_PATH_DASH_GAP = 0;
+export const ROUTE_PATH_ANIMATE_TIME = 0;
 

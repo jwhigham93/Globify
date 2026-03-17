@@ -10,7 +10,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef, Suspense } fr
 import { View, Platform, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Canvas } from '@react-three/fiber';
 import type { GlobeVisualizationProps, ViewMode, DataPoint, SelectedEntity, NetworkRiskMetrics, DisruptionMetrics, RoutePathSegment } from './types';
-import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, CONTROLS_HINT_HIDE_DISTANCE, ROUTE_PATH_COMPLETED_COLOR, ROUTE_PATH_REMAINING_COLOR, ROUTE_PATH_COMPLETED_STROKE, ROUTE_PATH_REMAINING_STROKE } from './constants';
+import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, CONTROLS_HINT_HIDE_DISTANCE, ROUTE_PATH_COMPLETED_STROKE, ROUTE_PATH_REMAINING_STROKE, TRUCK_COLOR_LIVE, TRUCK_COLOR_STALE, TRUCK_COLOR_LOST } from './constants';
 import { styles } from './styles';
 import { LoadingFallback } from './LoadingFallback';
 import { GlobeScene } from './GlobeScene';
@@ -154,15 +154,21 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   const routePathData: RoutePathSegment[] = useMemo(() => {
     if (!routeEndpoints || !selectedTruck) return [];
     const truckPos = { lat: selectedTruck.lat, lng: selectedTruck.lng };
+    const statusColorMap: Record<string, string> = {
+      live: TRUCK_COLOR_LIVE,
+      stale: TRUCK_COLOR_STALE,
+      lost: TRUCK_COLOR_LOST,
+    };
+    const baseColor = statusColorMap[selectedTruck.gpsStatus] ?? TRUCK_COLOR_LOST;
     return [
       {
         pnts: [routeEndpoints.origin, truckPos],
-        color: ROUTE_PATH_COMPLETED_COLOR,
+        color: baseColor + '59', // 35% opacity
         strokeWidth: ROUTE_PATH_COMPLETED_STROKE,
       },
       {
         pnts: [truckPos, routeEndpoints.destination],
-        color: ROUTE_PATH_REMAINING_COLOR,
+        color: baseColor + 'D9', // 85% opacity
         strokeWidth: ROUTE_PATH_REMAINING_STROKE,
       },
     ];
