@@ -19,6 +19,7 @@ import {
   PARTIAL_SUPPLY_NODE_COLOR,
   PARTIAL_SUPPLY_ARC_COLOR,
 } from '../components/Globe/constants';
+import { isClusterId, getClusterById } from './lodClustering';
 
 /**
  * Apply disruption visual state to data points.
@@ -45,6 +46,17 @@ export function applyDisruptionToPoints(
 
     if (point.id && partiallyServedIds.has(point.id)) {
       return { ...point, color: PARTIAL_SUPPLY_NODE_COLOR };
+    }
+
+    // Cluster markers — derive color from worst-case member status
+    if (point.id && isClusterId(point.id)) {
+      const cluster = getClusterById(point.id);
+      if (cluster) {
+        const hasOrphaned = cluster.memberIds.some((id) => orphanedIds.has(id));
+        if (hasOrphaned) return { ...point, color: ORPHAN_HIGHLIGHT_COLOR };
+        const hasPartial = cluster.memberIds.some((id) => partiallyServedIds.has(id));
+        if (hasPartial) return { ...point, color: PARTIAL_SUPPLY_NODE_COLOR };
+      }
     }
 
     // Healthy baseline — green

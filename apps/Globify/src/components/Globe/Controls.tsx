@@ -8,6 +8,11 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {
   ZOOM_MIN_DISTANCE,
   ZOOM_MAX_DISTANCE,
+  ZOOM_SPEED_FAR,
+  ZOOM_SPEED_NEAR,
+  ZOOM_SLOWDOWN_DIST,
+  ROTATE_SPEED_FAR,
+  ROTATE_SPEED_NEAR,
 } from './constants';
 
 interface ControlsProps {
@@ -56,7 +61,16 @@ export const Controls: React.FC<ControlsProps> = ({ onZoomChange, zoomTarget, on
       if (dist !== lastDistance.current) {
         lastDistance.current = dist;
         onZoomChange?.(dist);
+        console.log(`[zoom] camera distance: ${dist}`);
       }
+
+      // Adaptive zoom speed — slow down as we approach the surface
+      const rawDist = camera.position.length();
+      const t = Math.max(0, Math.min(1,
+        (rawDist - ZOOM_MIN_DISTANCE) / (ZOOM_SLOWDOWN_DIST - ZOOM_MIN_DISTANCE),
+      ));
+      controlsRef.current.zoomSpeed = ZOOM_SPEED_NEAR + t * (ZOOM_SPEED_FAR - ZOOM_SPEED_NEAR);
+      controlsRef.current.rotateSpeed = ROTATE_SPEED_NEAR + t * (ROTATE_SPEED_FAR - ROTATE_SPEED_NEAR);
     }
   });
 

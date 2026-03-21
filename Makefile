@@ -1,7 +1,8 @@
 # Globify — Root Development Makefile
 #
 # Usage:
-#   make dev         — Run Globify with mock data (no server needed)
+#   make dev         — Run Globify with mock data (+ tile server if tiles exist)
+#   make tiles       — Download & process NASA hi-res tiles for zoom detail
 #   make fullstack   — Start DB + API + Globify end-to-end
 #   make stop        — Stop everything, restore mock-data defaults
 #   make test        — Run all unit tests (JS + Go)
@@ -24,6 +25,12 @@ APP_JSON  := $(APP_DIR)/app.json
 dev:
 	@echo "Starting Globify in mock-data mode..."
 	npx nx serve Globify
+
+## Download & process NASA tiles for local high-res zoom (disabled — CDN tiles not yet available)
+# tiles:
+# 	@echo "Processing NASA tiles (requires sharp: npm install --save-dev sharp)..."
+# 	node tools/scripts/process-nasa-tiles.mjs --download --process --outputDir ./tiles
+# 	@echo "Tiles ready! Metro dev server will serve them automatically at /tiles/."
 
 ## Start full stack: DB → migrations → API → Globify
 fullstack: set-api-url

@@ -74,6 +74,16 @@ export interface ArcData {
 }
 
 /**
+ * Route path segment for three-globe's pathsData API.
+ * Uses 'pnts' key to match the default pathPoints accessor.
+ */
+export interface RoutePathSegment {
+  pnts: Array<{ lat: number; lng: number }>;
+  color: string;
+  strokeWidth: number;
+}
+
+/**
  * A data point visualized on the 3D globe.
  * Matches react-globe.gl's expected format for pointsData.
  */

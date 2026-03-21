@@ -13,10 +13,11 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/auth"
+	wsHub "github.com/jwhig/jw-dev/services/supply-chain-api/internal/ws"
 )
 
 // NewRouter sets up the chi router with all routes, middleware, and CORS.
-func NewRouter(pool *pgxpool.Pool, authCfg auth.Config) *chi.Mux {
+func NewRouter(pool *pgxpool.Pool, authCfg auth.Config, hub *wsHub.Hub) *chi.Mux {
 	r := chi.NewRouter()
 
 	// ── Global middleware ─────────────────────────────────────────────
@@ -33,7 +34,7 @@ func NewRouter(pool *pgxpool.Pool, authCfg auth.Config) *chi.Mux {
 	r.Use(cors.New(cors.Options{
 		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"Authorization", "Content-Type"},
+		AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Device-API-Key"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}).Handler)
@@ -69,7 +70,25 @@ func NewRouter(pool *pgxpool.Pool, authCfg auth.Config) *chi.Mux {
 
 		// Entity detail
 		r.Get("/entities/{id}", h.GetEntityDetail)
+
+		// Vehicles (read endpoints — Cognito auth)
+		r.Get("/vehicles", h.HandleListVehicles)
+		r.Get("/vehicles/positions", h.HandleBulkPositions)
+		r.Get("/vehicles/{id}", h.HandleGetVehicle)
+		r.Get("/vehicles/{id}/route", h.HandleGetVehicleRoute)
 	})
+
+	// ── Device GPS ingestion (device API key auth, no Cognito) ───────
+	r.Route("/api/v1/vehicles/{id}/gps", func(r chi.Router) {
+		r.Use(auth.DeviceKeyMiddleware(pool))
+		r.Post("/", h.HandleIngestGpsPing)
+	})
+
+	// ── WebSocket stream (no auth — read-only broadcast) ─────────────
+	if hub != nil {
+		r.Get("/api/v1/vehicles/stream", HandleWebSocketUpgrade(hub))
+		h.hub = hub
+	}
 
 	return r
 }

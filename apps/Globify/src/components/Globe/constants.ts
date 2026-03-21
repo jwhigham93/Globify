@@ -79,11 +79,85 @@ export const CAMERA_NEAR = 1;
 export const CAMERA_FAR = 50000;
 
 // Zoom limits (camera distance from origin)
-export const ZOOM_MIN_DISTANCE = 107;  // Closest zoom — USA fills most of the screen
+export const ZOOM_MIN_DISTANCE = 102;  // Closest zoom — extended for tile detail
 export const ZOOM_MAX_DISTANCE = 200;  // Farthest zoom — full globe with generous padding
 export const CONTROLS_HINT_HIDE_DISTANCE = 175; // Hide control hints when zoomed in past this
+
+// Adaptive zoom speed — slows scroll as camera nears the surface
+export const ZOOM_SPEED_FAR = 1.0;            // normal scroll speed when far
+export const ZOOM_SPEED_NEAR = 0.15;          // slow scroll speed near surface
+export const ZOOM_SLOWDOWN_DIST = 160;        // distance below which zoom starts slowing
+
+// Adaptive drag (rotate) speed — slows mouse drag as camera nears the surface
+export const ROTATE_SPEED_FAR = 1.0;          // normal drag speed when far
+export const ROTATE_SPEED_NEAR = 0.2;         // slow drag speed near surface
+
+// Progressive tile loading thresholds (camera distance)
+export const TILE_ZOOM_THRESHOLD_Z1 = 140; // Below this distance, load z1 tiles
+export const TILE_ZOOM_THRESHOLD_Z2 = 120; // Below this distance, load z2 tiles
+export const TILE_CACHE_MAX_SIZE = 32;     // Max textures in LRU cache
+export const TILE_FADE_DURATION = 300;     // Tile fade-in animation (ms)
+export const TILE_CHECK_INTERVAL = 200;    // Throttle tile checks in render loop (ms)
 
 // Star background settings
 export const STAR_SPHERE_RADIUS = 20000;
 export const STAR_ROTATION_SPEED_Y = 0.0001;
 export const STAR_ROTATION_SPEED_X = 0.00005;
+
+// ── Truck GPS visualization ──────────────────────────────────────────
+
+// Truck marker colors by GPS status
+export const TRUCK_COLOR_LIVE = '#00E676';     // Bright green — active
+export const TRUCK_COLOR_STALE = '#FFAB00';    // Amber — stale
+export const TRUCK_COLOR_LOST = '#FF1744';     // Red — lost signal
+
+// Truck marker sizing (globe-relative units)
+export const TRUCK_MARKER_LENGTH = 1.2;       // arrow tip to tail
+export const TRUCK_MARKER_WIDTH = 0.7;        // wingspan of arrow
+export const TRUCK_MARKER_DEPTH = 0.1;        // extrusion thickness
+export const TRUCK_MARKER_ALTITUDE = 0.005;
+
+// Zoom-based marker scaling — ALL markers scale with camera distance
+export const MARKER_SCALE_FAR_DIST = 200;     // camera distance where scale = max (default view)
+export const MARKER_SCALE_NEAR_DIST = 103;    // camera distance where scale = min (closest zoom)
+export const MARKER_SCALE_MAX = 2.5;          // scale factor when fully zoomed out
+export const MARKER_SCALE_MIN = 0.35;         // scale factor when fully zoomed in
+export const TRUCK_SCALE_MULTIPLIER = 0.45;   // trucks render at this fraction of location marker scale
+
+// Arc stroke zoom scaling — arcs thin out when zoomed in
+export const ARC_STROKE_SCALE_MIN = 0.55;     // stroke multiplier at closest zoom
+
+// Truck pulse animation (live status glow)
+export const TRUCK_PULSE_MIN_SCALE = 1.0;
+export const TRUCK_PULSE_MAX_SCALE = 1.3;
+export const TRUCK_PULSE_SPEED = 2.0;          // cycles per second
+
+// Stale pulse — slower amber throb to draw attention
+export const TRUCK_STALE_PULSE_MIN_SCALE = 1.0;
+export const TRUCK_STALE_PULSE_MAX_SCALE = 1.5;
+export const TRUCK_STALE_PULSE_SPEED = 0.8;    // slow throb
+
+// Lost blink — rapid scale flash to signal urgency
+export const TRUCK_LOST_BLINK_MIN_SCALE = 0.6;
+export const TRUCK_LOST_BLINK_MAX_SCALE = 1.6;
+export const TRUCK_LOST_BLINK_SPEED = 3.0;     // fast blink
+
+// Lost trucks render slightly larger so they're easier to spot
+export const TRUCK_LOST_SIZE_BOOST = 1.25;
+
+// Mock truck simulation
+export const TRUCK_SIM_TICK_MS = 800;         // position update interval
+export const TRUCK_SIM_MINUTES_PER_TICK = 0.5; // simulated time per tick (slow crawl at globe scale)
+
+// Staleness thresholds (ms) — mirrors server-side constants
+export const TRUCK_LIVE_THRESHOLD_MS = 5 * 60 * 1000;    // 5 minutes
+export const TRUCK_STALE_THRESHOLD_MS = 15 * 60 * 1000;  // 15 minutes
+
+// Route polyline — path segments when a truck is selected
+export const ROUTE_PATH_COMPLETED_STROKE = 1.2;
+export const ROUTE_PATH_REMAINING_STROKE = 1.8;
+export const ROUTE_PATH_ALTITUDE = 0.005;
+export const ROUTE_PATH_DASH_LENGTH = 1;
+export const ROUTE_PATH_DASH_GAP = 0;
+export const ROUTE_PATH_ANIMATE_TIME = 0;
+

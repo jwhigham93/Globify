@@ -9,8 +9,8 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef, Suspense } from 'react';
 import { View, Platform, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Canvas } from '@react-three/fiber';
-import type { GlobeVisualizationProps, ViewMode, DataPoint, SelectedEntity, NetworkRiskMetrics, DisruptionMetrics } from './types';
-import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, CONTROLS_HINT_HIDE_DISTANCE } from './constants';
+import type { GlobeVisualizationProps, ViewMode, DataPoint, SelectedEntity, NetworkRiskMetrics, DisruptionMetrics, RoutePathSegment } from './types';
+import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, CONTROLS_HINT_HIDE_DISTANCE, ROUTE_PATH_COMPLETED_STROKE, ROUTE_PATH_REMAINING_STROKE, TRUCK_COLOR_LIVE, TRUCK_COLOR_STALE, TRUCK_COLOR_LOST } from './constants';
 import { styles } from './styles';
 import { LoadingFallback } from './LoadingFallback';
 import { GlobeScene } from './GlobeScene';
@@ -19,14 +19,18 @@ import { RiskPanel } from './RiskPanel';
 import { LegendPanel } from './LegendPanel';
 import { DisruptionPanel } from './DisruptionPanel';
 import { EntityDetailPanel } from './EntityDetailPanel';
+import { TruckDetailPanel } from './TruckDetailPanel';
+import { TruckLayerToggle } from './TruckLayerToggle';
 import { computeNetworkRiskMetrics } from '../../services/concentrationRisk';
 import { applyRiskColorsToPoints, applyRiskColorsToArcs } from '../../services/riskVisuals';
 import { computeDisruptionMetrics } from '../../services/disruptionAnalysis';
 import { applyDisruptionToPoints, applyDisruptionToArcs } from '../../services/disruptionVisuals';
 import { allLocations, allRoutes, getLocationById, getInboundRoutes, buildSelectedEntity } from '../../services/supplyChainData';
-import { applySelectionToPoints, applySelectionToArcs } from '../../services/selectionHighlight';
+import { applySelectionToPoints, applySelectionToArcs, SELECTION_DIM_NODE_COLOR, SELECTION_DIM_ARC_COLOR, SELECTION_DIM_STROKE_MULTIPLIER } from '../../services/selectionHighlight';
 import { clusterByZoom, isClusterId, getClusterById, LOD_CLUSTER_CAMERA_THRESHOLD } from '../../services/lodClustering';
 import { config } from '../../services/config';
+import { useVehiclePositions } from '../../services/useVehiclePositions';
+import { getMockVehiclePositions, tickMockVehicles } from '../../services/mockVehicleData';
 import * as apiClient from '../../services/apiClient';
 
 /**
@@ -69,6 +73,119 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
     Math.round(Math.sqrt(CAMERA_POSITION[0] ** 2 + CAMERA_POSITION[1] ** 2 + CAMERA_POSITION[2] ** 2))
   );
   const [zoomTarget, setZoomTarget] = useState<number | null>(null);
+
+  // ── Truck GPS layer ──────────────────────────────────────────────
+  const [showTrucks, setShowTrucks] = useState(false);
+  const [selectedTruckId, setSelectedTruckId] = useState<string | null>(null);
+  const wsUrl = useApi ? config.resolvedWsUrl : undefined;
+  const apiBaseUrl = useApi ? config.apiBaseUrl : undefined;
+  const { positions: livePositions } = useVehiclePositions(wsUrl, apiBaseUrl);
+  // In dev mode, use mock vehicles so the truck layer is visible without an API
+  const [mockPositions, setMockPositions] = useState<Map<string, import('../../services/useVehiclePositions').VehiclePosition>>(
+    getMockVehiclePositions,
+  );
+  const vehiclePositions = useApi ? livePositions : mockPositions;
+
+  // Animate mock trucks in dev mode
+  useEffect(() => {
+    if (useApi || !showTrucks) return;
+    const id = setInterval(() => {
+      setMockPositions(tickMockVehicles());
+    }, 800);
+    return () => clearInterval(id);
+  }, [useApi, showTrucks]);
+
+  const selectedTruck = selectedTruckId
+    ? vehiclePositions.get(selectedTruckId) ?? null
+    : null;
+
+  // ── Route polyline for selected truck ────────────────────────────
+  const [routeEndpoints, setRouteEndpoints] = useState<{
+    origin: { lat: number; lng: number };
+    destination: { lat: number; lng: number };
+  } | null>(null);
+
+  // Fetch route endpoints when truck selection changes
+  useEffect(() => {
+    if (!selectedTruckId) {
+      setRouteEndpoints(null);
+      return;
+    }
+
+    if (useApi) {
+      let cancelled = false;
+      apiClient.get<{
+        originLat: number; originLng: number;
+        destinationLat: number; destinationLng: number;
+      }>(`/vehicles/${selectedTruckId}/route`)
+        .then((route) => {
+          if (!cancelled) {
+            setRouteEndpoints({
+              origin: { lat: route.originLat, lng: route.originLng },
+              destination: { lat: route.destinationLat, lng: route.destinationLng },
+            });
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setRouteEndpoints(null);
+        });
+      return () => { cancelled = true; };
+    }
+
+    // Dev mode: look up origin/destination by name from local data
+    const truck = vehiclePositions.get(selectedTruckId);
+    if (truck?.originName && truck?.destinationName) {
+      const origin = locations.find(l => l.name === truck.originName);
+      const dest = locations.find(l => l.name === truck.destinationName);
+      if (origin && dest) {
+        setRouteEndpoints({
+          origin: { lat: origin.lat, lng: origin.lng },
+          destination: { lat: dest.lat, lng: dest.lng },
+        });
+        return undefined;
+      }
+    }
+    setRouteEndpoints(null);
+    return undefined;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTruckId, useApi]);
+
+  // Build route path segments from endpoints + truck position
+  const routePathData: RoutePathSegment[] = useMemo(() => {
+    if (!routeEndpoints || !selectedTruck) return [];
+    const truckPos = { lat: selectedTruck.lat, lng: selectedTruck.lng };
+    const statusColorMap: Record<string, string> = {
+      live: TRUCK_COLOR_LIVE,
+      stale: TRUCK_COLOR_STALE,
+      lost: TRUCK_COLOR_LOST,
+    };
+    const baseColor = statusColorMap[selectedTruck.gpsStatus] ?? TRUCK_COLOR_LOST;
+    return [
+      {
+        pnts: [routeEndpoints.origin, truckPos],
+        color: baseColor + '59', // 35% opacity
+        strokeWidth: ROUTE_PATH_COMPLETED_STROKE,
+      },
+      {
+        pnts: [truckPos, routeEndpoints.destination],
+        color: baseColor + 'D9', // 85% opacity
+        strokeWidth: ROUTE_PATH_REMAINING_STROKE,
+      },
+    ];
+  }, [routeEndpoints, selectedTruck]);
+
+  const handleTruckClick = useCallback((vehicleId: string) => {
+    setSelectedTruckId(vehicleId);
+    setSelectedEntity(null); // close entity panel to avoid overlap
+  }, []);
+
+  const handleCloseTruck = useCallback(() => {
+    setSelectedTruckId(null);
+  }, []);
+
+  const toggleTrucks = useCallback(() => {
+    setShowTrucks((prev) => !prev);
+  }, []);
 
   // Detect WebGL support on web so we fail fast instead of showing a stuck overlay
   useEffect(() => {
@@ -199,16 +316,38 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
     return lodDataPoints;
   }, [viewMode, lodDataPoints, networkRiskMetrics, disabledNodeIds, orphanedIds, partiallyServedIds, locations]);
 
-  // Final pass: spotlight the selected entity and dim everything else
+  // Final pass: spotlight the selected entity (or dim for truck isolation)
   const highlightedDataPoints = useMemo(() => {
-    if (!selectedEntity) return effectiveDataPoints;
-    return applySelectionToPoints(effectiveDataPoints, selectedEntity);
-  }, [effectiveDataPoints, selectedEntity]);
+    if (selectedEntity) return applySelectionToPoints(effectiveDataPoints, selectedEntity);
+    // When a truck is selected, dim all location points so the truck stands out
+    if (selectedTruckId) {
+      return effectiveDataPoints.map((p) => ({ ...p, color: SELECTION_DIM_NODE_COLOR }));
+    }
+    return effectiveDataPoints;
+  }, [effectiveDataPoints, selectedEntity, selectedTruckId]);
 
   const highlightedArcsData = useMemo(() => {
-    if (!selectedEntity) return effectiveArcsData;
-    return applySelectionToArcs(effectiveArcsData, selectedEntity);
-  }, [effectiveArcsData, selectedEntity]);
+    if (selectedEntity) return applySelectionToArcs(effectiveArcsData, selectedEntity);
+    // When a truck is selected, dim all arcs so the truck stands out
+    if (selectedTruckId) {
+      return effectiveArcsData.map((a) => ({
+        ...a,
+        color: SELECTION_DIM_ARC_COLOR,
+        strokeWidth: a.strokeWidth * SELECTION_DIM_STROKE_MULTIPLIER,
+      }));
+    }
+    return effectiveArcsData;
+  }, [effectiveArcsData, selectedEntity, selectedTruckId]);
+
+  // When a truck is selected, show only that truck (hide others)
+  const isolatedVehiclePositions = useMemo(() => {
+    if (!selectedTruckId || !vehiclePositions) return vehiclePositions;
+    const selected = vehiclePositions.get(selectedTruckId);
+    if (!selected) return vehiclePositions;
+    const filtered = new Map<string, typeof selected>();
+    filtered.set(selectedTruckId, selected);
+    return filtered;
+  }, [vehiclePositions, selectedTruckId]);
 
   const handleError = (err: Error) => {
     setError(err);
@@ -253,6 +392,9 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
     (point: DataPoint) => {
       const pointId = point.id;
       if (!pointId) return;
+
+      // Close truck panel when selecting an entity to avoid overlap
+      setSelectedTruckId(null);
 
       if (viewMode === 'disruption') {
         // Suppliers and DCs toggle their disruption state
@@ -360,9 +502,9 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
     setDisabledNodeIds(new Set());
   }, []);
 
-  // Close the entity detail panel
   const handleCloseEntity = useCallback(() => {
     setSelectedEntity(null);
+    setSelectedTruckId(null);
   }, []);
 
   // Zoom in to break a cluster apart into individual markers
@@ -421,6 +563,11 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
             onZoomChange={setCameraDistance}
             zoomTarget={zoomTarget}
             onZoomTargetReached={handleZoomTargetReached}
+            tileCdnUrl={config.resolvedTileCdnUrl}
+            vehiclePositions={isolatedVehiclePositions}
+            showTrucks={showTrucks}
+            onTruckClick={handleTruckClick}
+            routePathData={routePathData}
           />
         </Canvas>
       </Suspense>
@@ -504,8 +651,15 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
           </Text>
         </View>
       )}
-      {/* View mode toggle */}
-      <ViewModeToggle viewMode={viewMode} onToggle={toggleViewMode} />
+      {/* Bottom-right button row: truck toggle + view mode toggle */}
+      <View style={{ position: 'absolute', bottom: 20, right: 20, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <TruckLayerToggle
+          visible={showTrucks}
+          onToggle={toggleTrucks}
+          vehicleCount={vehiclePositions.size}
+        />
+        <ViewModeToggle viewMode={viewMode} onToggle={toggleViewMode} />
+      </View>
       {/* Risk summary panel */}
       <RiskPanel
         metrics={networkRiskMetrics}
@@ -523,6 +677,8 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
         onClose={handleCloseEntity}
         onZoomToExpand={handleZoomToExpand}
       />
+      {/* Truck detail panel */}
+      <TruckDetailPanel vehicle={selectedTruck} onClose={handleCloseTruck} />
     </View>
   );
 };
