@@ -184,7 +184,7 @@ export function tickMockVehicles(): Map<string, VehiclePosition> {
     if (t.vp.gpsStatus === 'lost') continue;
 
     const segs = t.corridor.waypoints.length - 1;
-    const speed = t.vp.speedMph;
+    const speed = t.vp.speedMph ?? 55;
     const degPerTick = (speed / 60) * simMinutes / 69;
     const segA = t.corridor.waypoints[Math.floor(Math.min(t.corridorIdx, segs - 1))];
     const segB = t.corridor.waypoints[Math.min(Math.floor(t.corridorIdx) + 1, segs)];
