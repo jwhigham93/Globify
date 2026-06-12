@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -29,8 +31,21 @@ func main() {
 
 	// ── Database ─────────────────────────────────────────────────────
 	dbURL := os.Getenv("DATABASE_URL")
+
+	// If SSM_DATABASE_URL is set, read the real connection string from
+	// AWS SSM Parameter Store (SecureString). This keeps the Neon password
+	// out of Lambda env vars. Falls back to DATABASE_URL for local dev.
+	if ssmName := os.Getenv("SSM_DATABASE_URL"); ssmName != "" {
+		val, err := readSSMParameter(context.Background(), ssmName)
+		if err != nil {
+			log.Fatal().Err(err).Str("param", ssmName).Msg("failed to read DATABASE_URL from SSM")
+		}
+		dbURL = val
+		log.Info().Str("param", ssmName).Msg("loaded DATABASE_URL from SSM Parameter Store")
+	}
+
 	if dbURL == "" {
-		log.Fatal().Msg("DATABASE_URL environment variable is required")
+		log.Fatal().Msg("DATABASE_URL environment variable (or SSM_DATABASE_URL parameter) is required")
 	}
 
 	pool, err := db.ConnectPool(context.Background(), dbURL)
@@ -93,3 +108,28 @@ func main() {
 	}
 	log.Info().Msg("server stopped")
 }
+
+// readSSMParameter reads a SecureString parameter from AWS SSM Parameter Store.
+func readSSMParameter(ctx context.Context, name string) (string, error) {
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		return "", fmt.Errorf("loading AWS config: %w", err)
+	}
+
+	client := ssm.NewFromConfig(cfg)
+	out, err := client.GetParameter(ctx, &ssm.GetParameterInput{
+		Name:           &name,
+		WithDecryption: boolPtr(true),
+	})
+	if err != nil {
+		return "", fmt.Errorf("getting SSM parameter %q: %w", name, err)
+	}
+
+	if out.Parameter == nil || out.Parameter.Value == nil {
+		return "", fmt.Errorf("SSM parameter %q has no value", name)
+	}
+
+	return *out.Parameter.Value, nil
+}
+
+func boolPtr(b bool) *bool { return &b }

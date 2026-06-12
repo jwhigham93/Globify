@@ -17,15 +17,17 @@ func NewContainerStack(scope constructs.Construct, id string, props *awscdk.Stac
 	stack := awscdk.NewStack(scope, &id, props)
 
 	repo := awsecr.NewRepository(stack, jsii.String("SupplyChainApiRepo"), &awsecr.RepositoryProps{
-		RepositoryName:   jsii.String("supply-chain-api"),
-		ImageTagMutability: awsecr.TagMutability_IMMUTABLE,
-		RemovalPolicy:    awscdk.RemovalPolicy_DESTROY, // dev — change for prod
-		EmptyOnDelete:    jsii.Bool(true),
+		RepositoryName:     jsii.String("supply-chain-api"),
+		// MUTABLE for dev convenience (re-push :latest without new tags).
+		// Switch to TagMutability_IMMUTABLE in production to enforce image provenance.
+		ImageTagMutability: awsecr.TagMutability_MUTABLE,
+		RemovalPolicy:      awscdk.RemovalPolicy_DESTROY, // dev — change for prod
+		EmptyOnDelete:      jsii.Bool(true),
 		LifecycleRules: &[]*awsecr.LifecycleRule{
 			{
-				Description:  jsii.String("Retain last 10 images"),
+				Description:   jsii.String("Retain last 10 images"),
 				MaxImageCount: jsii.Number(10),
-				RulePriority: jsii.Number(1),
+				RulePriority:  jsii.Number(1),
 			},
 		},
 	})

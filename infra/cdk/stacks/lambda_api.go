@@ -3,7 +3,9 @@ package stacks
 import (
 	"github.com/aws/aws-cdk-go/awscdk/v2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsecr"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsssm"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 )
@@ -22,8 +24,11 @@ type LambdaApiStackProps struct {
 // Uses a Lambda Function URL for a free, public HTTPS endpoint —
 // no API Gateway or ALB required.
 //
-// Database: expects an external PostgreSQL connection string (e.g. Neon
-// free tier) set in the DATABASE_URL environment variable after deploy.
+// Database: the Neon PostgreSQL connection string is stored in SSM
+// Parameter Store (SecureString) and read by the Go server at cold start.
+// Store the connection string with:
+//
+//	aws ssm put-parameter --name /supply-chain/DATABASE_URL --value "postgres://..." --type SecureString
 //
 // Cost: ~$0/month within free tier (1M requests, 400K GB-seconds).
 type LambdaApiStack struct {
@@ -33,6 +38,16 @@ type LambdaApiStack struct {
 
 func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiStackProps) *LambdaApiStack {
 	stack := awscdk.NewStack(scope, &id, &props.StackProps)
+
+	// ── SSM Parameter for DATABASE_URL (SecureString) ───────────
+	// The actual value is stored via CLI after deploy:
+	//   aws ssm put-parameter --name /supply-chain/DATABASE_URL --value "postgres://..." --type SecureString
+	ssmParamName := "/supply-chain/DATABASE_URL"
+
+	// Import reference so we can grant read access (parameter is created via CLI)
+	ssmParam := awsssm.StringParameter_FromSecureStringParameterAttributes(stack, jsii.String("DbUrlParam"), &awsssm.SecureStringParameterAttributes{
+		ParameterName: jsii.String(ssmParamName),
+	})
 
 	// ── Lambda function from ECR container image ─────────────────
 	// The ECR image tagged "lambda" must include the Lambda Web Adapter
@@ -53,9 +68,22 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 			"COGNITO_CLIENT_ID":    jsii.String(""), // set after deploy
 			"COGNITO_REGION":       jsii.String("us-east-1"),
 			"ALLOWED_ORIGINS":      jsii.String("*"),
-			"DATABASE_URL":         jsii.String(""), // Neon connection string
+			"SSM_DATABASE_URL":     jsii.String(ssmParamName), // param name, not the secret
 		},
 	})
+
+	// ── Grant Lambda permission to read the SSM SecureString ─────
+	ssmParam.GrantRead(fn)
+	// Also grant kms:Decrypt for the default SSM key (aws/ssm)
+	fn.AddToRolePolicy(awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
+		Actions:   &[]*string{jsii.String("kms:Decrypt")},
+		Resources: &[]*string{jsii.String("*")},
+		Conditions: &map[string]interface{}{
+			"StringEquals": map[string]*string{
+				"kms:ViaService": jsii.String("ssm.us-east-1.amazonaws.com"),
+			},
+		},
+	}))
 
 	// ── Function URL — public HTTPS endpoint, no API Gateway needed ─
 	fnUrl := fn.AddFunctionUrl(&awslambda.FunctionUrlOptions{
@@ -80,14 +108,23 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 		Description: jsii.String("Lambda function name"),
 	})
 
-	awscdk.NewCfnOutput(stack, jsii.String("SetEnvCommand"), &awscdk.CfnOutputProps{
+	awscdk.NewCfnOutput(stack, jsii.String("StoreDbUrlCommand"), &awscdk.CfnOutputProps{
+		Value: jsii.String(
+			"aws ssm put-parameter --name /supply-chain/DATABASE_URL " +
+				"--value 'postgres://user:pass@ep-xxx.us-east-2.aws.neon.tech/supplychain?sslmode=require' " +
+				"--type SecureString --overwrite",
+		),
+		Description: jsii.String("Command template to store DATABASE_URL in SSM (fill in real values)"),
+	})
+
+	awscdk.NewCfnOutput(stack, jsii.String("SetCognitoCommand"), &awscdk.CfnOutputProps{
 		Value: jsii.String(
 			"aws lambda update-function-configuration --function-name supply-chain-api " +
-				"--environment 'Variables={DATABASE_URL=postgres://user:pass@host/db?sslmode=require," +
-				"COGNITO_USER_POOL_ID=us-east-1_xxx,COGNITO_CLIENT_ID=xxx,COGNITO_REGION=us-east-1," +
-				"ALLOWED_ORIGINS=*,AWS_LWA_PORT=8080,PORT=8080,LOG_FORMAT=json}'",
+				"--environment 'Variables={COGNITO_USER_POOL_ID=us-east-1_xxx,COGNITO_CLIENT_ID=xxx," +
+				"COGNITO_REGION=us-east-1,ALLOWED_ORIGINS=*,AWS_LWA_PORT=8080,PORT=8080," +
+				"LOG_FORMAT=json,SSM_DATABASE_URL=/supply-chain/DATABASE_URL}'",
 		),
-		Description: jsii.String("Command template to set environment variables (fill in real values)"),
+		Description: jsii.String("Command template to set Cognito env vars (fill in real values)"),
 	})
 
 	return &LambdaApiStack{

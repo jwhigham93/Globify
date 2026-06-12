@@ -138,3 +138,9 @@ cache/
 
 #ai
 tmpclaude-*
+.nx/polygraph
+.claude/worktrees
+.claude/settings.local.json
+
+# logs
+error.log

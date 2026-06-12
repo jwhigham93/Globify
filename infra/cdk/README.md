@@ -120,6 +120,8 @@ cdk deploy --all -c profile=ultra-lite  # side project
 
 You also need an AWS account with appropriate IAM permissions. For ultra-lite, you additionally need a [Neon](https://neon.tech) account (free tier).
 
+> **Security note:** The deployment commands below use `Read-Host` or variable interpolation to keep passwords and connection strings out of shell history. Never paste secrets directly as CLI arguments — they end up in `~\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt` (PowerShell) or `~/.bash_history` (Bash) and are visible to any process inspecting running commands.
+
 ---
 
 ## Deployment — Full Profile
@@ -158,12 +160,15 @@ cd services/supply-chain-api/k8s
 
 kubectl apply -f namespace.yaml
 
-# Create DB secret (retrieve password from Secrets Manager first)
-aws secretsmanager get-secret-value --secret-id <RdsSecretArn> \
-  --query SecretString --output text
-kubectl create secret generic supply-chain-db-secret \
-  --namespace supply-chain \
-  --from-literal=DATABASE_URL="postgres://supplychain:PASSWORD@RDS_ENDPOINT:5432/supplychain?sslmode=require"
+# Retrieve password from Secrets Manager and create K8s secret in one step
+# (avoids the password appearing as a CLI argument in shell history)
+$rdsSecret = aws secretsmanager get-secret-value --secret-id <RdsSecretArn> `
+  --query SecretString --output text | ConvertFrom-Json
+$dbUrl = "postgres://supplychain:$($rdsSecret.password)@<RDS_ENDPOINT>:5432/supplychain?sslmode=require"
+kubectl create secret generic supply-chain-db-secret `
+  --namespace supply-chain `
+  --from-literal=DATABASE_URL=$dbUrl
+Remove-Variable rdsSecret, dbUrl
 
 # Update configmap.yaml with Cognito values from CDK outputs, then:
 kubectl apply -f configmap.yaml
@@ -231,24 +236,31 @@ App Runner auto-deploys when a new `:latest` tag is pushed.
 
 After the first deploy, set the DATABASE_URL and Cognito variables:
 
-```sh
-# Get RDS password from Secrets Manager
-aws secretsmanager get-secret-value --secret-id <RdsSecretArn> \
-  --query SecretString --output text
+```powershell
+# Retrieve RDS password from Secrets Manager
+$rdsSecret = aws secretsmanager get-secret-value --secret-id <RdsSecretArn> `
+  --query SecretString --output text | ConvertFrom-Json
+$dbUrl = "postgres://supplychain:$($rdsSecret.password)@<RDS_ENDPOINT>:5432/supplychain?sslmode=require"
 
-# Update App Runner service with real values
-aws apprunner update-service --service-arn <SERVICE_ARN> \
-  --source-configuration '{
-    "ImageRepository": {
-      "ImageConfiguration": {
-        "RuntimeEnvironmentVariables": {
-          "DATABASE_URL": "postgres://supplychain:PASSWORD@RDS_ENDPOINT:5432/supplychain?sslmode=require",
-          "COGNITO_USER_POOL_ID": "<from CDK output>",
-          "COGNITO_CLIENT_ID": "<from CDK output>"
-        }
+# Build the config JSON with the secret interpolated (not pasted as a literal)
+$config = @"
+{
+  "ImageRepository": {
+    "ImageConfiguration": {
+      "RuntimeEnvironmentVariables": {
+        "DATABASE_URL": "$dbUrl",
+        "COGNITO_USER_POOL_ID": "<from CDK output>",
+        "COGNITO_CLIENT_ID": "<from CDK output>"
       }
     }
-  }'
+  }
+}
+"@
+
+aws apprunner update-service --service-arn <SERVICE_ARN> `
+  --source-configuration $config
+
+Remove-Variable rdsSecret, dbUrl, config
 ```
 
 ### 4. Run migrations
@@ -271,13 +283,18 @@ Same as Full Profile step 5 above.
 ### 1. Set up Neon database (one-time)
 
 1. Sign up at [neon.tech](https://neon.tech) (free tier: 0.5 GB storage, auto-suspend)
-2. Create a project → copy the PostgreSQL connection string
+2. Create a project with **PostgreSQL 17** → copy the **pooled** connection string (port 6543)
 3. Run migrations locally against the Neon endpoint:
 
-```sh
+```powershell
 cd services/supply-chain-api
-# Install golang-migrate if needed: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-migrate -path migrations -database "postgres://user:pass@ep-xxx.us-east-2.aws.neon.tech/supplychain?sslmode=require" up
+# Install golang-migrate if needed:
+# go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+# Prompt for the connection string so it never appears in shell history
+$env:DATABASE_URL = Read-Host -Prompt "Neon connection string"
+migrate -path migrations -database $env:DATABASE_URL up
+Remove-Item Env:DATABASE_URL
 ```
 
 ### 2. Bootstrap & deploy
@@ -304,28 +321,47 @@ docker tag supply-chain-api:lambda ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/su
 docker push ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/supply-chain-api:lambda
 ```
 
-### 4. Configure Lambda environment
+### 4. Store database secret in SSM Parameter Store
+
+The Neon connection string is stored as a SecureString in AWS SSM Parameter Store — **not** in Lambda environment variables. This keeps your database password encrypted and out of plaintext configs.
+
+```powershell
+# Prompt for the connection string so it never appears in shell history
+$dbUrl = Read-Host -Prompt "Neon connection string"
+aws ssm put-parameter `
+  --name /supply-chain/DATABASE_URL `
+  --value $dbUrl `
+  --type SecureString `
+  --overwrite
+Remove-Variable dbUrl
+```
+
+The Lambda function reads this parameter at cold start via the `SSM_DATABASE_URL` env var (set automatically by CDK).
+
+### 5. Configure Lambda Cognito environment
+
+Set the non-secret Cognito variables (these are public identifiers, safe in env vars):
 
 ```sh
 aws lambda update-function-configuration \
   --function-name supply-chain-api \
   --environment 'Variables={
-    DATABASE_URL=postgres://user:pass@ep-xxx.us-east-2.aws.neon.tech/supplychain?sslmode=require,
     COGNITO_USER_POOL_ID=<from CDK output>,
     COGNITO_CLIENT_ID=<from CDK output>,
     COGNITO_REGION=us-east-1,
     ALLOWED_ORIGINS=*,
     AWS_LWA_PORT=8080,
     PORT=8080,
-    LOG_FORMAT=json
+    LOG_FORMAT=json,
+    SSM_DATABASE_URL=/supply-chain/DATABASE_URL
   }'
 ```
 
-### 5. Deploy web app
+### 6. Deploy web app
 
 Same as Full Profile step 5 (S3 sync + CloudFront invalidation).
 
-### 6. Update Globify config
+### 7. Update Globify config
 
 Point `API_BASE_URL` to the Lambda Function URL from CDK outputs.
 
