@@ -10,6 +10,7 @@
     "clear-api-url": "node -e \"const fs=require('fs');const f='apps/Globify/app.json';const j=JSON.parse(fs.readFileSync(f,'utf8'));j.expo.extra.API_BASE_URL='';fs.writeFileSync(f,JSON.stringify(j,null,2)+'\\n');console.log('API_BASE_URL → (empty, mock mode)')\""
   },
   "private": true,
+  "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "@expo/metro-config": "~54.0.12",
     "@expo/metro-runtime": "~6.1.2",
