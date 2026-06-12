@@ -1,2 +1,10 @@
 packages:
   - "apps/*"
+
+allowBuilds:
+  "@swc/core": true
+  nx: true
+  sharp: true
+  unrs-resolver: true
+  detox: false
+  dtrace-provider: false
