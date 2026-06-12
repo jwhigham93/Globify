@@ -21,25 +21,25 @@
   "dependencies": {
     "@expo/metro-config": "~54.0.12",
     "@react-native-async-storage/async-storage": "^2.2.0",
-    "@react-three/fiber": "^9.5.0",
+    "@react-three/fiber": "^9.6.1",
     "amazon-cognito-identity-js": "^6.3.16",
     "expo": "~54.0.31",
     "expo-gl": "~16.0.9",
     "expo-splash-screen": "*",
     "expo-status-bar": "*",
     "expo-system-ui": "*",
-    "globe.gl": "^2.44.1",
+    "globe.gl": "^2.46.1",
     "react": "*",
     "react-native": "*",
     "react-native-svg": "*",
     "react-native-svg-transformer": "*",
     "react-native-web": "*",
-    "three": "^0.180.0",
-    "three-globe": "^2.45.0"
+    "three": "^0.184.0",
+    "three-globe": "^2.45.2"
   },
   "devDependencies": {
     "@testing-library/react-native": "*",
-    "@types/three": "^0.182.0",
+    "@types/three": "^0.184.0",
     "jest-expo": "*",
     "metro-config": "*",
     "metro-resolver": "*"

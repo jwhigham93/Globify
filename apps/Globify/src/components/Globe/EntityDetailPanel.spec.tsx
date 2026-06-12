@@ -62,7 +62,7 @@ const mockCluster: SelectedCluster = {
   location: { id: 'cluster-atl', name: 'Atlanta Metro', lat: 33.75, lng: -84.39, type: 'restaurant' },
   metro: 'atl',
   memberCount: 5,
-  memberNames: ['CFA Midtown', 'CFA Buckhead', 'CFA Decatur', 'CFA Sandy Springs', 'CFA Dunwoody'],
+  memberNames: ['Midtown', 'Buckhead', 'Decatur', 'Sandy Springs', 'Dunwoody'],
   servingDCs: ['Atlanta DC', 'Conley DC'],
   totalInboundVolume: 2500,
 };
@@ -176,8 +176,8 @@ describe('EntityDetailPanel', () => {
       const { getByText } = render(
         <EntityDetailPanel entity={mockCluster} onClose={jest.fn()} />
       );
-      expect(getByText('CFA Midtown')).toBeTruthy();
-      expect(getByText('CFA Buckhead')).toBeTruthy();
+      expect(getByText('Midtown')).toBeTruthy();
+      expect(getByText('Buckhead')).toBeTruthy();
     });
 
     it('lists serving DCs', () => {

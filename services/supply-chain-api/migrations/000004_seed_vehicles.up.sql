@@ -3,26 +3,26 @@
 
 -- 20 vehicles (15 trucks, 5 vans)
 INSERT INTO vehicles (id, name, type, status) VALUES
-  ('a1000000-0000-0000-0000-000000000001', 'CFA-T001 (Atlanta)',    'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000002', 'CFA-T002 (Atlanta)',    'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000003', 'CFA-T003 (Dallas)',     'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000004', 'CFA-T004 (Dallas)',     'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000005', 'CFA-T005 (Charlotte)',  'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000006', 'CFA-T006 (Nashville)',  'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000007', 'CFA-T007 (Houston)',    'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000008', 'CFA-T008 (Tampa)',      'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000009', 'CFA-T009 (Chicago)',    'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000010', 'CFA-T010 (Denver)',     'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000011', 'CFA-T011 (Phoenix)',    'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000012', 'CFA-T012 (Raleigh)',    'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000013', 'CFA-T013 (Orlando)',    'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000014', 'CFA-T014 (DC Metro)',   'truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000015', 'CFA-T015 (Kansas City)','truck', 'active'),
-  ('a1000000-0000-0000-0000-000000000016', 'CFA-V001 (Atlanta)',    'van',   'active'),
-  ('a1000000-0000-0000-0000-000000000017', 'CFA-V002 (Dallas)',     'van',   'active'),
-  ('a1000000-0000-0000-0000-000000000018', 'CFA-V003 (Nashville)',  'van',   'active'),
-  ('a1000000-0000-0000-0000-000000000019', 'CFA-V004 (Charlotte)',  'van',   'active'),
-  ('a1000000-0000-0000-0000-000000000020', 'CFA-V005 (Houston)',    'van',   'active');
+  ('a1000000-0000-0000-0000-000000000001', 'SC-T001 (Atlanta)',    'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000002', 'SC-T002 (Atlanta)',    'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000003', 'SC-T003 (Dallas)',     'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000004', 'SC-T004 (Dallas)',     'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000005', 'SC-T005 (Charlotte)',  'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000006', 'SC-T006 (Nashville)',  'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000007', 'SC-T007 (Houston)',    'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000008', 'SC-T008 (Tampa)',      'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000009', 'SC-T009 (Chicago)',    'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000010', 'SC-T010 (Denver)',     'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000011', 'SC-T011 (Phoenix)',    'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000012', 'SC-T012 (Raleigh)',    'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000013', 'SC-T013 (Orlando)',    'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000014', 'SC-T014 (DC Metro)',   'truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000015', 'SC-T015 (Kansas City)','truck', 'active'),
+  ('a1000000-0000-0000-0000-000000000016', 'SC-V001 (Atlanta)',    'van',   'active'),
+  ('a1000000-0000-0000-0000-000000000017', 'SC-V002 (Dallas)',     'van',   'active'),
+  ('a1000000-0000-0000-0000-000000000018', 'SC-V003 (Nashville)',  'van',   'active'),
+  ('a1000000-0000-0000-0000-000000000019', 'SC-V004 (Charlotte)',  'van',   'active'),
+  ('a1000000-0000-0000-0000-000000000020', 'SC-V005 (Houston)',    'van',   'active');
 
 -- GPS pings — 5 pings per vehicle along realistic highway routes
 -- T001: I-85 Atlanta→Charlotte corridor

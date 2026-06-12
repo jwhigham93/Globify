@@ -154,7 +154,7 @@ for (const corridor of CORRIDORS) {
         recordedAt: new Date().toISOString(),
         gpsStatus,
         updatedAt: Date.now(),
-        vehicleName: `CFA-${id.replace('truck-', 'T')}`,
+        vehicleName: `SC-${id.replace('truck-', 'T')}`,
         originName: corridor.originName,
         destinationName: corridor.destinationName,
         routeStartedAt,

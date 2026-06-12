@@ -1,6 +1,6 @@
 # Supply Chain API
 
-A Go REST API for CFA supply chain visualization, risk computation, and disruption simulation. Built with Go 1.26, chi v5, PostgreSQL 16 (via pgx/v5 + sqlc), and Cognito JWT authentication.
+A Go REST API for supply chain visualization, risk computation, and disruption simulation. Built with Go 1.26, chi v5, PostgreSQL 17 (via pgx/v5 + sqlc), and Cognito JWT authentication.
 
 ## Architecture
 

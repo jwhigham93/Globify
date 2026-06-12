@@ -15,7 +15,7 @@ const mockVehicle: VehiclePosition = {
   recordedAt: new Date().toISOString(),
   gpsStatus: 'live',
   updatedAt: Date.now(),
-  vehicleName: 'CFA-T001',
+  vehicleName: 'SC-T001',
   originName: 'Atlanta DC',
   destinationName: 'Charlotte DC',
   routeStartedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
@@ -33,7 +33,7 @@ describe('TruckDetailPanel', () => {
     const { getByText } = render(
       <TruckDetailPanel vehicle={mockVehicle} onClose={jest.fn()} />,
     );
-    expect(getByText('CFA-T001')).toBeTruthy();
+    expect(getByText('SC-T001')).toBeTruthy();
   });
 
   it('falls back to vehicleId when vehicleName is missing', () => {

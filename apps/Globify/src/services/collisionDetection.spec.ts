@@ -196,7 +196,7 @@ describe('buildAltitudeMap', () => {
   });
 
   describe('real-world data collisions', () => {
-    it('handles exact overlap like Cargill MN and CFA Minneapolis', () => {
+    it('handles exact overlap like Cargill MN and Minneapolis restaurant', () => {
       const points: DataPoint[] = [
         makePoint({
           id: 'sup-cargill',
@@ -218,7 +218,7 @@ describe('buildAltitudeMap', () => {
       expect(map.get('rest-023')).toBe(COLLISION_ALTITUDE_RESTAURANT);
     });
 
-    it('does not raise altitude for isolated points like CFA Miami', () => {
+    it('does not raise altitude for isolated points like Miami restaurant', () => {
       // Miami has no nearby suppliers or DCs
       const points: DataPoint[] = [
         makePoint({

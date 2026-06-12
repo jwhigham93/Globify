@@ -9,7 +9,7 @@ export const ATMOSPHERE_COLOR = '#ffffff';
 
 // Arc colors - gradient arrays [startColor, endColor]
 export const SUPPLIER_TO_DC_COLOR: [string, string] = ['#FF9933', '#003e5f']; // Vivid amber to dark blue
-export const DC_TO_RESTAURANT_COLOR: [string, string] = ['#00A3FF', '#E60E33']; // Dark blue to vivid CFA red
+export const DC_TO_RESTAURANT_COLOR: [string, string] = ['#00A3FF', '#E60E33']; // Dark blue to vivid red
 
 // Arc stroke settings (volume-based thickness)
 export const ARC_BASE_STROKE_SUPPLIER_TO_DC = 0.06;
@@ -30,7 +30,7 @@ export const POINT_RADIUS_RESTAURANT = 0.03;
 // Point colors by location type (vivid to pop against dark globe)
 export const POINT_COLOR_SUPPLIER = '#FF9933'; // Vivid amber
 export const POINT_COLOR_DC = '#003e5f'; // Dark blue
-export const POINT_COLOR_RESTAURANT = '#E60E33'; // Vivid CFA red
+export const POINT_COLOR_RESTAURANT = '#E60E33'; // Vivid red
 
 // Globe settings
 export const ATMOSPHERE_ALTITUDE = 0.20;

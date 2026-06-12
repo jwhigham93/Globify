@@ -2,7 +2,7 @@
 
 > **Screenshot / GIF here** — replace this line with an image of the globe running
 
-A full-stack supply chain visibility platform built around an interactive 3D globe. Renders real-time truck positions, supplier routes, disruption risk, and concentration risk for a Chick-fil-A supply chain dataset.
+A full-stack supply chain visibility platform built around an interactive 3D globe. Renders real-time truck positions, supplier routes, disruption risk, and concentration risk for a representative QSR supply chain dataset.
 
 **Tech highlights:** React Native · Expo 54 · Three.js (react-three-fiber) · custom GLSL tile shader · Go 1.26 · chi · PostgreSQL 17 · sqlc · WebSocket GPS streaming · AWS CDK v2 · Cognito auth · Lambda / App Runner / EKS deployment profiles
 

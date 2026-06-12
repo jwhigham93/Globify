@@ -26,7 +26,7 @@
 
 # Project: Globify
 
-Supply-chain visibility platform — a 3D globe showing real-time truck positions, supplier routes, disruption risk, and concentration risk for a Chick-fil-A supply chain dataset.
+Supply-chain visibility platform — a 3D globe showing real-time truck positions, supplier routes, disruption risk, and concentration risk for a representative QSR supply chain dataset.
 
 ## Monorepo layout
 
