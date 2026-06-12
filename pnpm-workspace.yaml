@@ -8,3 +8,21 @@ allowBuilds:
   unrs-resolver: true
   detox: false
   dtrace-provider: false
+
+# @nx/jest@22.7.5 ships jest 30 internally; jest-expo@54 requires jest 29.
+# Force everything to jest 29 to eliminate the dual-version conflict.
+overrides:
+  jest: "29.7.0"
+  jest-runtime: "29.7.0"
+  jest-circus: "29.7.0"
+  jest-config: "29.7.0"
+  jest-runner: "29.7.0"
+  jest-mock: "29.7.0"
+  jest-snapshot: "29.7.0"
+  jest-environment-node: "29.7.0"
+  "@jest/core": "29.7.0"
+  "@jest/globals": "29.7.0"
+  "@jest/environment": "29.7.0"
+  "@jest/fake-timers": "29.7.0"
+  "@jest/expect": "29.7.0"
+  expect: "29.7.0"
