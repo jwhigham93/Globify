@@ -14,6 +14,7 @@ import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, CONTROLS_HINT_HID
 import { styles } from './styles';
 import { LoadingFallback } from './LoadingFallback';
 import { GlobeScene } from './GlobeScene';
+import { GlobeErrorBoundary } from './GlobeErrorBoundary';
 import { ViewModeToggle } from './ViewModeToggle';
 import { RiskPanel } from './RiskPanel';
 import { LegendPanel } from './LegendPanel';
@@ -541,36 +542,38 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
           <Text style={styles.loadingText}>Loading Earth texture...</Text>
         </View>
       )}
-      <Suspense fallback={<LoadingFallback />}>
-        <Canvas 
-          camera={{ 
-            position: CAMERA_POSITION, 
-            fov: CAMERA_FOV, 
-            near: CAMERA_NEAR, 
-            far: CAMERA_FAR 
-          }} 
-          style={styles.canvas}
-        >
-          <GlobeScene
-            dataPoints={highlightedDataPoints}
-            arcsData={highlightedArcsData}
-            onReady={onReady}
-            onError={handleError}
-            onTextureLoading={handleTextureLoading}
-            isStarsSpinning={isStarsSpinning}
-            onPointClick={handlePointClick}
-            onBackgroundClick={handleCloseEntity}
-            onZoomChange={setCameraDistance}
-            zoomTarget={zoomTarget}
-            onZoomTargetReached={handleZoomTargetReached}
-            tileCdnUrl={config.resolvedTileCdnUrl}
-            vehiclePositions={isolatedVehiclePositions}
-            showTrucks={showTrucks}
-            onTruckClick={handleTruckClick}
-            routePathData={routePathData}
-          />
-        </Canvas>
-      </Suspense>
+      <GlobeErrorBoundary>
+        <Suspense fallback={<LoadingFallback />}>
+          <Canvas
+            camera={{
+              position: CAMERA_POSITION,
+              fov: CAMERA_FOV,
+              near: CAMERA_NEAR,
+              far: CAMERA_FAR
+            }}
+            style={styles.canvas}
+          >
+            <GlobeScene
+              dataPoints={highlightedDataPoints}
+              arcsData={highlightedArcsData}
+              onReady={onReady}
+              onError={handleError}
+              onTextureLoading={handleTextureLoading}
+              isStarsSpinning={isStarsSpinning}
+              onPointClick={handlePointClick}
+              onBackgroundClick={handleCloseEntity}
+              onZoomChange={setCameraDistance}
+              zoomTarget={zoomTarget}
+              onZoomTargetReached={handleZoomTargetReached}
+              tileCdnUrl={config.resolvedTileCdnUrl}
+              vehiclePositions={isolatedVehiclePositions}
+              showTrucks={showTrucks}
+              onTruckClick={handleTruckClick}
+              routePathData={routePathData}
+            />
+          </Canvas>
+        </Suspense>
+      </GlobeErrorBoundary>
       {/* Star spin toggle button */}
       <TouchableOpacity 
         style={styles.spinButton} 

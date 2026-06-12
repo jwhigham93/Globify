@@ -52,7 +52,18 @@ export function useVehiclePositions(
   // Handle incoming WebSocket message
   const handleMessage = useCallback((msg: WsMessage) => {
     if (msg.type === 'position_update') {
-      const update = msg.data as PositionUpdate;
+      const raw = msg.data as Record<string, unknown>;
+      if (
+        typeof raw?.vehicleId !== 'string' ||
+        typeof raw?.lat !== 'number' ||
+        typeof raw?.lng !== 'number' ||
+        raw.lat < -90 || raw.lat > 90 ||
+        raw.lng < -180 || raw.lng > 180 ||
+        !['live', 'stale', 'lost'].includes(raw.gpsStatus as string)
+      ) {
+        return;
+      }
+      const update = raw as unknown as PositionUpdate;
       setPositions((prev) => {
         const next = new Map(prev);
         next.set(update.vehicleId, { ...update, updatedAt: Date.now() });

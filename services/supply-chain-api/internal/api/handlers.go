@@ -161,6 +161,14 @@ func (h *Handlers) SimulateDisruption(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if len(req.DisabledIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "disabledIds must contain at least one node")
+		return
+	}
+	if len(req.DisabledIDs) > 50 {
+		writeError(w, http.StatusBadRequest, "disabledIds exceeds maximum of 50 nodes")
+		return
+	}
 
 	dbLocs, err := h.queries.ListLocations(r.Context())
 	if err != nil {
@@ -236,17 +244,24 @@ func (h *Handlers) GetEntityDetail(w http.ResponseWriter, r *http.Request) {
 		})
 
 	case models.LocationTypeRestaurant:
-		// Resolve serving DC names.
-		dcNameSet := make(map[string]struct{})
+		// Collect unique DC source IDs, then resolve names in one batch query.
+		dcIDSet := make(map[string]struct{}, len(inboundRoutes))
 		for _, route := range inboundRoutes {
-			dcLoc, err := h.queries.GetLocation(r.Context(), route.SourceID)
-			if err == nil {
-				dcNameSet[dcLoc.Name] = struct{}{}
-			}
+			dcIDSet[route.SourceID] = struct{}{}
 		}
-		servingDCs := make([]string, 0, len(dcNameSet))
-		for name := range dcNameSet {
-			servingDCs = append(servingDCs, name)
+		dcIDs := make([]string, 0, len(dcIDSet))
+		for id := range dcIDSet {
+			dcIDs = append(dcIDs, id)
+		}
+		dcLocs, err := h.queries.ListLocationsByIDs(r.Context(), dcIDs)
+		if err != nil {
+			log.Error().Err(err).Msg("failed to fetch serving DCs")
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		servingDCs := make([]string, 0, len(dcLocs))
+		for _, loc := range dcLocs {
+			servingDCs = append(servingDCs, loc.Name)
 		}
 
 		writeJSON(w, http.StatusOK, models.SelectedRestaurant{

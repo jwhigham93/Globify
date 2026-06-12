@@ -13,3 +13,9 @@ SELECT id, name, lat, lng, type
 FROM locations
 WHERE type = $1
 ORDER BY name;
+
+-- name: ListLocationsByIDs :many
+SELECT id, name, lat, lng, type
+FROM locations
+WHERE id = ANY($1::text[])
+ORDER BY name;
