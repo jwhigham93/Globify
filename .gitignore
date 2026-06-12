@@ -141,6 +141,10 @@ tmpclaude-*
 .nx/polygraph
 .claude/worktrees
 .claude/settings.local.json
+.agents/
+.codex/
+.opencode/
+opencode.json
 
 # logs
 error.log
