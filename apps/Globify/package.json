@@ -19,11 +19,11 @@
     }
   },
   "dependencies": {
-    "@expo/metro-config": "~54.0.12",
+    "@expo/metro-config": "~56.0.14",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-three/fiber": "^9.6.1",
-    "amazon-cognito-identity-js": "^6.3.16",
-    "expo": "~54.0.31",
+    "amazon-cognito-identity-js": "^6.3.17",
+    "expo": "~56.0.11",
     "expo-asset": "~12.0.12",
     "expo-constants": "~18.0.13",
     "expo-gl": "~16.0.9",
