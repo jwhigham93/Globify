@@ -41,7 +41,7 @@ func NewRouter(pool *pgxpool.Pool, authCfg auth.Config, hub *wsHub.Hub) *chi.Mux
 
 	// ── Health checks (no auth) ──────────────────────────────────────
 	r.Get("/healthz", HealthzHandler())
-	r.Get("/readyz", ReadyzHandler(pool))
+	r.Get("/readyz", ReadyzHandler(pool, hub))
 
 	// ── API v1 routes (with auth) ────────────────────────────────────
 	h := NewHandlers(pool)
@@ -100,13 +100,18 @@ func zerologRequestLogger(next http.Handler) http.Handler {
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 
 		defer func() {
-			log.Info().
+			evt := log.Info().
 				Str("method", r.Method).
 				Str("path", r.URL.Path).
 				Int("status", ww.Status()).
 				Dur("latency", time.Since(start)).
-				Str("requestId", middleware.GetReqID(r.Context())).
-				Msg("request")
+				Str("requestId", middleware.GetReqID(r.Context()))
+
+			if token, ok := auth.ClaimsFromContext(r.Context()); ok {
+				evt = evt.Str("userSub", token.Subject())
+			}
+
+			evt.Msg("request")
 		}()
 
 		next.ServeHTTP(ww, r)
