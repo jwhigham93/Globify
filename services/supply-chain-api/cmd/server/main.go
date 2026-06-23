@@ -55,14 +55,26 @@ func main() {
 	defer pool.Close()
 
 	// ── Auth config ──────────────────────────────────────────────────
+	// Fail closed: authentication is required unless AUTH_DISABLED=true is set
+	// explicitly (local dev only). A missing User Pool ID in any other case is
+	// a fatal misconfiguration rather than a silent open door.
 	authCfg := auth.ConfigFromEnv()
+	var verifier *auth.Verifier
+	if os.Getenv("AUTH_DISABLED") == "true" {
+		log.Warn().Msg("AUTH_DISABLED=true — authentication is OFF; do not use in production")
+	} else {
+		if authCfg.UserPoolID == "" {
+			log.Fatal().Msg("COGNITO_USER_POOL_ID is required (or set AUTH_DISABLED=true for local dev)")
+		}
+		verifier = auth.NewVerifier(authCfg)
+	}
 
 	// ── WebSocket hub ────────────────────────────────────────────────
 	hub := ws.NewHub()
 	go hub.Run()
 
 	// ── Router ───────────────────────────────────────────────────────
-	router := api.NewRouter(pool, authCfg, hub)
+	router := api.NewRouter(pool, verifier, hub)
 
 	// ── Server ───────────────────────────────────────────────────────
 	port := os.Getenv("PORT")

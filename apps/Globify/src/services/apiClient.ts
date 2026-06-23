@@ -19,6 +19,14 @@ export function setTokenGetter(fn: () => string | null): void {
   tokenGetter = fn;
 }
 
+/**
+ * Returns the current access token (or null). Lets non-HTTP transports (e.g. the
+ * WebSocket GPS stream) reuse the same token registered via setTokenGetter.
+ */
+export function getToken(): string | null {
+  return tokenGetter ? tokenGetter() : null;
+}
+
 /** API error with status code */
 export class ApiError extends Error {
   constructor(

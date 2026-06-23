@@ -23,7 +23,9 @@ function getUserPool(): CognitoUserPool {
 }
 
 /**
- * Sign in with email and password. Returns the JWT ID token on success.
+ * Sign in with email and password. Returns the JWT access token on success.
+ * The access token (not the ID token) is the correct credential for API
+ * authorization — the Go API validates token_use=access + client_id.
  */
 export function signIn(email: string, password: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -36,7 +38,7 @@ export function signIn(email: string, password: string): Promise<string> {
 
     user.authenticateUser(authDetails, {
       onSuccess: (session: CognitoUserSession) => {
-        resolve(session.getIdToken().getJwtToken());
+        resolve(session.getAccessToken().getJwtToken());
       },
       onFailure: (err: Error) => {
         reject(err);
@@ -57,7 +59,7 @@ export function signOut(): void {
 }
 
 /**
- * Get the current ID token, refreshing the session if needed.
+ * Get the current access token, refreshing the session if needed.
  * Returns null if no valid session exists.
  */
 export function getCurrentToken(): Promise<string | null> {
@@ -76,8 +78,8 @@ export function getCurrentToken(): Promise<string | null> {
       }
 
       // Check if token is within 5 minutes of expiry — refresh proactively
-      const idToken = session.getIdToken();
-      const expiresAt = idToken.getExpiration() * 1000; // ms
+      const accessToken = session.getAccessToken();
+      const expiresAt = accessToken.getExpiration() * 1000; // ms
       const fiveMinutes = 5 * 60 * 1000;
 
       if (Date.now() > expiresAt - fiveMinutes) {
@@ -87,12 +89,12 @@ export function getCurrentToken(): Promise<string | null> {
             resolve(null);
             return;
           }
-          resolve(newSession.getIdToken().getJwtToken());
+          resolve(newSession.getAccessToken().getJwtToken());
         });
         return;
       }
 
-      resolve(idToken.getJwtToken());
+      resolve(accessToken.getJwtToken());
     });
   });
 }

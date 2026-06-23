@@ -31,14 +31,31 @@ const MAX_RECONNECT_DELAY = 30_000;
 
 export class GpsStreamService {
   private url: string;
+  private getToken?: () => string | null;
   private ws: WebSocket | null = null;
   private listeners = new Set<Listener>();
   private reconnectDelay = INITIAL_RECONNECT_DELAY;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
 
-  constructor(url: string) {
+  /**
+   * @param url Base WebSocket URL.
+   * @param getToken Optional provider for the Cognito access token. Browsers
+   *   cannot set an Authorization header on a WebSocket, so the token is
+   *   appended as a `?token=` query parameter and re-read on every (re)connect
+   *   in case it has rotated.
+   */
+  constructor(url: string, getToken?: () => string | null) {
     this.url = url;
+    this.getToken = getToken;
+  }
+
+  /** Build the connection URL, appending the current access token if present. */
+  private buildUrl(): string {
+    const token = this.getToken?.() ?? null;
+    if (!token) return this.url;
+    const separator = this.url.includes('?') ? '&' : '?';
+    return `${this.url}${separator}token=${encodeURIComponent(token)}`;
   }
 
   /** Start the WebSocket connection. */
@@ -46,7 +63,7 @@ export class GpsStreamService {
     if (this.disposed) return;
     this.cleanup();
 
-    const ws = new WebSocket(this.url);
+    const ws = new WebSocket(this.buildUrl());
 
     ws.onopen = () => {
       this.reconnectDelay = INITIAL_RECONNECT_DELAY;
