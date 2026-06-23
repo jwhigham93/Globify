@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: true
+  path_instructions:
+    - path: "services/supply-chain-api/**"
+      instructions: >-
+        Go 1.26 with chi router, zerolog, and pgx/v5. Flag unhandled errors,
+        missing context cancellation/propagation, and any SQL constructed
+        outside of sqlc-generated code. Database access in tests should hit a
+        real Postgres (no DB mocking).
+    - path: "apps/Globify/src/services/**"
+      instructions: >-
+        Pure TypeScript services with no React. Each service must have a
+        matching .spec.ts alongside it.
+    - path: "apps/Globify/src/components/Globe/**"
+      instructions: >-
+        Three.js via react-three-fiber. Watch for per-frame allocations,
+        leaked geometries/materials/textures, and disposal in cleanup.
+    - path: "infra/cdk/**"
+      instructions: >-
+        AWS CDK v2 in Go across three profiles (full, lite, ultra-lite). Call
+        out cost-impacting resource changes and profile-specific drift.
+  path_filters:
+    # sqlc-generated Go output
+    - "!**/internal/db/**"
+    # lockfiles and generated assets
+    - "!**/pnpm-lock.yaml"
+    - "!tools/scripts/**/*.tiles"
+chat:
+  auto_reply: true
