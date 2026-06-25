@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/cors"
 	"github.com/rs/zerolog/log"
@@ -16,8 +17,36 @@ import (
 	wsHub "github.com/jwhig/jw-dev/services/supply-chain-api/internal/ws"
 )
 
+// defaultDevOrigin is used when ALLOWED_ORIGINS is unset (local Expo web dev).
+// In deployed environments ALLOWED_ORIGINS must be set to the real web origin.
+const defaultDevOrigin = "http://localhost:8081"
+
+// parseAllowedOrigins reads the comma-separated ALLOWED_ORIGINS env var. It
+// never returns a wildcard: an unset value falls back to the local dev origin
+// so a misconfiguration fails closed rather than opening CORS to the world.
+func parseAllowedOrigins() []string {
+	raw := strings.TrimSpace(os.Getenv("ALLOWED_ORIGINS"))
+	if raw == "" {
+		return []string{defaultDevOrigin}
+	}
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			origins = append(origins, trimmed)
+		}
+	}
+	if len(origins) == 0 {
+		return []string{defaultDevOrigin}
+	}
+	return origins
+}
+
 // NewRouter sets up the chi router with all routes, middleware, and CORS.
-func NewRouter(pool *pgxpool.Pool, authCfg auth.Config, hub *wsHub.Hub) *chi.Mux {
+//
+// verifier validates Cognito access tokens; pass nil to disable authentication
+// (local dev only — the server only does this when AUTH_DISABLED=true).
+func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi.Mux {
 	r := chi.NewRouter()
 
 	// ── Global middleware ─────────────────────────────────────────────
@@ -27,66 +56,80 @@ func NewRouter(pool *pgxpool.Pool, authCfg auth.Config, hub *wsHub.Hub) *chi.Mux
 	r.Use(middleware.Recoverer)
 
 	// ── CORS ─────────────────────────────────────────────────────────
-	allowedOrigins := strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
-	if len(allowedOrigins) == 1 && allowedOrigins[0] == "" {
-		allowedOrigins = []string{"*"}
-	}
 	r.Use(cors.New(cors.Options{
-		AllowedOrigins:   allowedOrigins,
+		AllowedOrigins:   parseAllowedOrigins(),
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Device-API-Key"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}).Handler)
 
-	// ── Health checks (no auth) ──────────────────────────────────────
+	// ── Health checks (no auth — infra probes) ───────────────────────
+	// Liveness (/healthz) and readiness (/readyz) must be reachable by
+	// orchestrator probes (e.g. the EKS readinessProbe in k8s/deployment.yaml)
+	// without credentials. /readyz only exposes DB-up status and a WS client
+	// count — operational data, not user data — so it stays public.
 	r.Get("/healthz", HealthzHandler())
 	r.Get("/readyz", ReadyzHandler(pool, hub))
 
-	// ── API v1 routes (with auth) ────────────────────────────────────
 	h := NewHandlers(pool)
 
-	r.Route("/api/v1", func(r chi.Router) {
-		// Apply Cognito auth to all /api/v1 routes.
-		if authCfg.UserPoolID != "" {
-			r.Use(auth.CognitoMiddleware(authCfg))
+	// ── Authenticated API routes ─────────────────────────────────────
+	r.Group(func(r chi.Router) {
+		// Per-IP rate limit (in-process — defense-in-depth only; on ultra-lite
+		// the Lambda reserved-concurrency cap is the hard ceiling, since
+		// per-instance counters aren't shared across execution environments).
+		r.Use(httprate.LimitByIP(100, time.Minute))
+		if verifier != nil {
+			r.Use(verifier.Middleware())
 		}
 
-		// Locations
-		r.Get("/locations", h.ListLocations)
-		r.Get("/locations/{id}", h.GetLocation)
+		r.Route("/api/v1", func(r chi.Router) {
+			// Locations
+			r.Get("/locations", h.ListLocations)
+			r.Get("/locations/{id}", h.GetLocation)
 
-		// Routes
-		r.Get("/routes", h.ListRoutes)
+			// Routes
+			r.Get("/routes", h.ListRoutes)
 
-		// Visualization bundle
-		r.Get("/supply-chain/visualization", h.GetVisualizationData)
+			// Visualization bundle
+			r.Get("/supply-chain/visualization", h.GetVisualizationData)
 
-		// Risk metrics
-		r.Get("/risk/network", h.GetNetworkRiskMetrics)
+			// Risk metrics
+			r.Get("/risk/network", h.GetNetworkRiskMetrics)
 
-		// Disruption simulation
-		r.Post("/disruption/simulate", h.SimulateDisruption)
+			// Disruption simulation (mutating — tighter rate limit; RBAC-ready:
+			// wrap with auth.RequireGroups("analysts","admins") to restrict).
+			r.With(httprate.LimitByIP(20, time.Minute)).
+				Post("/disruption/simulate", h.SimulateDisruption)
 
-		// Entity detail
-		r.Get("/entities/{id}", h.GetEntityDetail)
+			// Entity detail
+			r.Get("/entities/{id}", h.GetEntityDetail)
 
-		// Vehicles (read endpoints — Cognito auth)
-		r.Get("/vehicles", h.HandleListVehicles)
-		r.Get("/vehicles/positions", h.HandleBulkPositions)
-		r.Get("/vehicles/{id}", h.HandleGetVehicle)
-		r.Get("/vehicles/{id}/route", h.HandleGetVehicleRoute)
+			// Vehicles (read endpoints)
+			r.Get("/vehicles", h.HandleListVehicles)
+			r.Get("/vehicles/positions", h.HandleBulkPositions)
+			r.Get("/vehicles/{id}", h.HandleGetVehicle)
+			r.Get("/vehicles/{id}/route", h.HandleGetVehicleRoute)
+
+			// Short-lived ticket for opening the WebSocket stream (authed).
+			r.Post("/vehicles/stream/ticket", h.HandleIssueStreamTicket)
+		})
 	})
 
-	// ── Device GPS ingestion (device API key auth, no Cognito) ───────
+	// ── Device GPS ingestion (device API key auth, not Cognito) ──────
 	r.Route("/api/v1/vehicles/{id}/gps", func(r chi.Router) {
+		r.Use(httprate.LimitByIP(60, time.Minute))
 		r.Use(auth.DeviceKeyMiddleware(pool))
 		r.Post("/", h.HandleIngestGpsPing)
 	})
 
-	// ── WebSocket stream (no auth — read-only broadcast) ─────────────
+	// ── WebSocket stream (single-use ticket auth via ?ticket=) ───────
+	// Rate-limited per IP: redemption runs a DB DELETE...RETURNING, so cap
+	// unauthenticated probing of random ?ticket= values before it hits the DB.
 	if hub != nil {
-		r.Get("/api/v1/vehicles/stream", HandleWebSocketUpgrade(hub))
+		r.With(httprate.LimitByIP(60, time.Minute)).
+			Get("/api/v1/vehicles/stream", HandleWebSocketUpgrade(pool, hub, verifier != nil))
 		h.hub = hub
 	}
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsec2"
@@ -28,9 +29,14 @@ func main() {
 	fmt.Printf("CDK profile: %s\n", profile)
 
 	// ── Shared environment (account/region from CLI profile) ─────
+	// Account comes from CDK_DEFAULT_ACCOUNT (set by the AWS CLI/credentials)
+	// when available. Leaving it unset yields an account-agnostic synth — an
+	// empty-string account is invalid ("aws:///us-east-1") and breaks synth.
 	env := &awscdk.Environment{
-		Account: jsii.String(""),
-		Region:  jsii.String("us-east-1"),
+		Region: jsii.String("us-east-1"),
+	}
+	if acct := os.Getenv("CDK_DEFAULT_ACCOUNT"); acct != "" {
+		env.Account = jsii.String(acct)
 	}
 
 	// ── 1. Auth — Cognito User Pool (all profiles) ──────────────
@@ -84,7 +90,23 @@ func main() {
 		})
 	}
 
-	// ── 6. Compute ──────────────────────────────────────────────
+	// ── 6. Web Hosting — S3 + CloudFront (all profiles) ─────────
+	// Created before compute so the Lambda (ultra-lite) can lock its CORS to the
+	// CloudFront origin via a cross-stack reference.
+	var cfWebAclArn *string
+	if securityStack != nil {
+		cfWebAclArn = securityStack.CloudFrontWebAclArn
+	}
+	webHosting := stacks.NewWebHostingStack(app, "GlobifyWebHosting", &stacks.WebHostingStackProps{
+		StackProps: awscdk.StackProps{
+			Env:         env,
+			Description: jsii.String("Globify — S3 + CloudFront static web hosting"),
+		},
+		CloudFrontWebAclArn: cfWebAclArn,
+	})
+	webOrigin := jsii.String("https://" + *webHosting.Distribution.DistributionDomainName())
+
+	// ── 7. Compute ──────────────────────────────────────────────
 	switch profile {
 	case "full":
 		stacks.NewClusterStack(app, "SupplyChainCluster", &stacks.ClusterStackProps{
@@ -113,21 +135,9 @@ func main() {
 				Description: jsii.String("Supply Chain API — Lambda + Function URL (ultra-lite)"),
 			},
 			EcrRepository: containerStack.Repository,
+			WebOrigin:     webOrigin,
 		})
 	}
-
-	// ── 7. Web Hosting — S3 + CloudFront (all profiles) ─────────
-	var cfWebAclArn *string
-	if securityStack != nil {
-		cfWebAclArn = securityStack.CloudFrontWebAclArn
-	}
-	stacks.NewWebHostingStack(app, "GlobifyWebHosting", &stacks.WebHostingStackProps{
-		StackProps: awscdk.StackProps{
-			Env:         env,
-			Description: jsii.String("Globify — S3 + CloudFront static web hosting"),
-		},
-		CloudFrontWebAclArn: cfWebAclArn,
-	})
 
 	// ── 7b. Tile Hosting — disabled pending visual quality improvements
 	// stacks.NewTileHostingStack(app, "GlobifyTileHosting", &stacks.TileHostingStackProps{

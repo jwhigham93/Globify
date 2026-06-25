@@ -4,6 +4,8 @@ import {
   PositionUpdate,
   WsMessage,
 } from './gpsStreamService';
+import { getToken } from './apiClient';
+import { fetchStreamTicket } from './streamTicketService';
 
 export interface VehiclePosition extends PositionUpdate {
   updatedAt: number; // monotonic timestamp for staleness checks
@@ -30,7 +32,12 @@ export function useVehiclePositions(
     if (!apiBaseUrl) return;
     let cancelled = false;
 
-    fetch(`${apiBaseUrl}/api/v1/vehicles/positions`)
+    const token = getToken();
+    const headers: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
+
+    fetch(`${apiBaseUrl}/api/v1/vehicles/positions`, { headers })
       .then((res) => (res.ok ? res.json() : []))
       .then((data: PositionUpdate[]) => {
         if (cancelled) return;
@@ -76,7 +83,7 @@ export function useVehiclePositions(
   useEffect(() => {
     if (!wsUrl) return;
 
-    const svc = new GpsStreamService(wsUrl);
+    const svc = new GpsStreamService(wsUrl, fetchStreamTicket);
     serviceRef.current = svc;
 
     const unsub = svc.subscribe((msg) => {
@@ -86,7 +93,7 @@ export function useVehiclePositions(
       handleMessage(msg);
     });
 
-    svc.connect();
+    void svc.connect();
 
     return () => {
       unsub();

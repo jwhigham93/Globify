@@ -6,6 +6,16 @@ import (
 	"testing"
 )
 
+// mustVerifier builds a Verifier for tests, failing the test on error.
+func mustVerifier(t *testing.T, cfg Config) *Verifier {
+	t.Helper()
+	v, err := NewVerifier(cfg)
+	if err != nil {
+		t.Fatalf("NewVerifier: %v", err)
+	}
+	return v
+}
+
 func TestCognitoMiddleware_MissingAuthHeader(t *testing.T) {
 	cfg := Config{
 		UserPoolID: "us-east-1_test",
@@ -13,7 +23,7 @@ func TestCognitoMiddleware_MissingAuthHeader(t *testing.T) {
 		ClientID:   "test-client-id",
 	}
 
-	handler := CognitoMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := mustVerifier(t, cfg).Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -36,7 +46,7 @@ func TestCognitoMiddleware_InvalidAuthFormat(t *testing.T) {
 		ClientID:   "test-client-id",
 	}
 
-	handler := CognitoMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := mustVerifier(t, cfg).Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -57,7 +67,7 @@ func TestCognitoMiddleware_InvalidToken(t *testing.T) {
 		ClientID:   "test-client-id",
 	}
 
-	handler := CognitoMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := mustVerifier(t, cfg).Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
