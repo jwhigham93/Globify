@@ -4,20 +4,8 @@ import {
   PositionUpdate,
   WsMessage,
 } from './gpsStreamService';
-import { getToken, post } from './apiClient';
-
-/**
- * Fetch a short-lived, single-use ticket for the GPS WebSocket stream.
- * The JWT authenticates this HTTP call; only the opaque ticket reaches the WS URL.
- */
-async function fetchStreamTicket(): Promise<string | null> {
-  try {
-    const res = await post<{ ticket: string; expiresIn: number }>('/vehicles/stream/ticket', {});
-    return res.ticket;
-  } catch {
-    return null;
-  }
-}
+import { getToken } from './apiClient';
+import { fetchStreamTicket } from './streamTicketService';
 
 export interface VehiclePosition extends PositionUpdate {
   updatedAt: number; // monotonic timestamp for staleness checks

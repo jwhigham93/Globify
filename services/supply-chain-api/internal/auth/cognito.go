@@ -60,6 +60,9 @@ type Verifier struct {
 // URL cannot be registered (e.g. misconfigured region/pool ID), so callers can
 // fail fast at startup rather than surfacing the problem on every request.
 func NewVerifier(cfg Config) (*Verifier, error) {
+	if cfg.UserPoolID == "" || cfg.Region == "" || cfg.ClientID == "" {
+		return nil, fmt.Errorf("incomplete Cognito config: userPoolID, region, and clientID are all required")
+	}
 	cache := jwk.NewCache(context.Background())
 	if err := cache.Register(cfg.jwksURL(), jwk.WithMinRefreshInterval(15*time.Minute)); err != nil {
 		return nil, fmt.Errorf("registering JWKS endpoint %q: %w", cfg.jwksURL(), err)

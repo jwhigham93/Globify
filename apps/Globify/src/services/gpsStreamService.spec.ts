@@ -66,6 +66,24 @@ describe('GpsStreamService', () => {
     svc.dispose();
   });
 
+  it('does not open an unauthenticated socket when ticket issuance fails', async () => {
+    jest.useFakeTimers();
+    try {
+      const svc = new GpsStreamService('wss://api.test.com/stream', async () => {
+        throw new Error('ticket issuance down');
+      });
+      await svc.connect();
+
+      // The connect() catch path must back off rather than fall through to an
+      // unauthenticated upgrade, so no WebSocket should have been created.
+      expect(FakeWebSocket.instances).toHaveLength(0);
+
+      svc.dispose();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('fetches a fresh ticket on each connect (tickets are single-use)', async () => {
     let n = 0;
     const svc = new GpsStreamService('wss://api.test.com/stream', async () => `ticket-${++n}`);

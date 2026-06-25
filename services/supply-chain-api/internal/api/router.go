@@ -125,8 +125,11 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi
 	})
 
 	// ── WebSocket stream (single-use ticket auth via ?ticket=) ───────
+	// Rate-limited per IP: redemption runs a DB DELETE...RETURNING, so cap
+	// unauthenticated probing of random ?ticket= values before it hits the DB.
 	if hub != nil {
-		r.Get("/api/v1/vehicles/stream", HandleWebSocketUpgrade(pool, hub, verifier != nil))
+		r.With(httprate.LimitByIP(60, time.Minute)).
+			Get("/api/v1/vehicles/stream", HandleWebSocketUpgrade(pool, hub, verifier != nil))
 		h.hub = hub
 	}
 
