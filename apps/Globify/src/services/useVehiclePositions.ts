@@ -4,7 +4,20 @@ import {
   PositionUpdate,
   WsMessage,
 } from './gpsStreamService';
-import { getToken } from './apiClient';
+import { getToken, post } from './apiClient';
+
+/**
+ * Fetch a short-lived, single-use ticket for the GPS WebSocket stream.
+ * The JWT authenticates this HTTP call; only the opaque ticket reaches the WS URL.
+ */
+async function fetchStreamTicket(): Promise<string | null> {
+  try {
+    const res = await post<{ ticket: string; expiresIn: number }>('/vehicles/stream/ticket', {});
+    return res.ticket;
+  } catch {
+    return null;
+  }
+}
 
 export interface VehiclePosition extends PositionUpdate {
   updatedAt: number; // monotonic timestamp for staleness checks
@@ -82,7 +95,7 @@ export function useVehiclePositions(
   useEffect(() => {
     if (!wsUrl) return;
 
-    const svc = new GpsStreamService(wsUrl, getToken);
+    const svc = new GpsStreamService(wsUrl, fetchStreamTicket);
     serviceRef.current = svc;
 
     const unsub = svc.subscribe((msg) => {
@@ -92,7 +105,7 @@ export function useVehiclePositions(
       handleMessage(msg);
     });
 
-    svc.connect();
+    void svc.connect();
 
     return () => {
       unsub();

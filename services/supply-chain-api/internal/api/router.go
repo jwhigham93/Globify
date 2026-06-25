@@ -64,21 +64,25 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi
 		MaxAge:           300,
 	}).Handler)
 
-	// ── Health check (no auth — liveness probe) ──────────────────────
+	// ── Health checks (no auth — infra probes) ───────────────────────
+	// Liveness (/healthz) and readiness (/readyz) must be reachable by
+	// orchestrator probes (e.g. the EKS readinessProbe in k8s/deployment.yaml)
+	// without credentials. /readyz only exposes DB-up status and a WS client
+	// count — operational data, not user data — so it stays public.
 	r.Get("/healthz", HealthzHandler())
+	r.Get("/readyz", ReadyzHandler(pool, hub))
 
 	h := NewHandlers(pool)
 
-	// ── Authenticated routes ─────────────────────────────────────────
-	// /readyz and all /api/v1 read endpoints require a valid access token.
+	// ── Authenticated API routes ─────────────────────────────────────
 	r.Group(func(r chi.Router) {
-		// Per-IP rate limit (in-process; no WAF needed on ultra-lite).
+		// Per-IP rate limit (in-process — defense-in-depth only; on ultra-lite
+		// the Lambda reserved-concurrency cap is the hard ceiling, since
+		// per-instance counters aren't shared across execution environments).
 		r.Use(httprate.LimitByIP(100, time.Minute))
 		if verifier != nil {
 			r.Use(verifier.Middleware())
 		}
-
-		r.Get("/readyz", ReadyzHandler(pool, hub))
 
 		r.Route("/api/v1", func(r chi.Router) {
 			// Locations
@@ -107,6 +111,9 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi
 			r.Get("/vehicles/positions", h.HandleBulkPositions)
 			r.Get("/vehicles/{id}", h.HandleGetVehicle)
 			r.Get("/vehicles/{id}/route", h.HandleGetVehicleRoute)
+
+			// Short-lived ticket for opening the WebSocket stream (authed).
+			r.Post("/vehicles/stream/ticket", h.HandleIssueStreamTicket)
 		})
 	})
 
@@ -117,9 +124,9 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi
 		r.Post("/", h.HandleIngestGpsPing)
 	})
 
-	// ── WebSocket stream (access-token auth via ?token=) ─────────────
+	// ── WebSocket stream (single-use ticket auth via ?ticket=) ───────
 	if hub != nil {
-		r.Get("/api/v1/vehicles/stream", HandleWebSocketUpgrade(verifier, hub))
+		r.Get("/api/v1/vehicles/stream", HandleWebSocketUpgrade(pool, hub, verifier != nil))
 		h.hub = hub
 	}
 

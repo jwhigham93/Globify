@@ -66,7 +66,11 @@ func main() {
 		if authCfg.UserPoolID == "" {
 			log.Fatal().Msg("COGNITO_USER_POOL_ID is required (or set AUTH_DISABLED=true for local dev)")
 		}
-		verifier = auth.NewVerifier(authCfg)
+		v, err := auth.NewVerifier(authCfg)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to initialize Cognito verifier")
+		}
+		verifier = v
 	}
 
 	// ── WebSocket hub ────────────────────────────────────────────────

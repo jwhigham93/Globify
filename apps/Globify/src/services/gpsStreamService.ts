@@ -31,7 +31,7 @@ const MAX_RECONNECT_DELAY = 30_000;
 
 export class GpsStreamService {
   private url: string;
-  private getToken?: () => string | null;
+  private getTicket?: () => Promise<string | null>;
   private ws: WebSocket | null = null;
   private listeners = new Set<Listener>();
   private reconnectDelay = INITIAL_RECONNECT_DELAY;
@@ -40,30 +40,41 @@ export class GpsStreamService {
 
   /**
    * @param url Base WebSocket URL.
-   * @param getToken Optional provider for the Cognito access token. Browsers
-   *   cannot set an Authorization header on a WebSocket, so the token is
-   *   appended as a `?token=` query parameter and re-read on every (re)connect
-   *   in case it has rotated.
+   * @param getTicket Optional provider for a short-lived, single-use stream
+   *   ticket. Browsers cannot set an Authorization header on a WebSocket, so the
+   *   client obtains an opaque ticket from an authenticated HTTP call and it is
+   *   appended as a `?ticket=` query parameter. A fresh ticket is fetched on
+   *   every (re)connect because tickets are single-use.
    */
-  constructor(url: string, getToken?: () => string | null) {
+  constructor(url: string, getTicket?: () => Promise<string | null>) {
     this.url = url;
-    this.getToken = getToken;
+    this.getTicket = getTicket;
   }
 
-  /** Build the connection URL, appending the current access token if present. */
-  private buildUrl(): string {
-    const token = this.getToken?.() ?? null;
-    if (!token) return this.url;
+  /** Build the connection URL, appending a freshly fetched ticket if available. */
+  private async buildUrl(): Promise<string> {
+    const ticket = this.getTicket ? await this.getTicket() : null;
+    if (!ticket) return this.url;
     const separator = this.url.includes('?') ? '&' : '?';
-    return `${this.url}${separator}token=${encodeURIComponent(token)}`;
+    return `${this.url}${separator}ticket=${encodeURIComponent(ticket)}`;
   }
 
-  /** Start the WebSocket connection. */
-  connect(): void {
+  /** Start the WebSocket connection. Fetches a ticket first if configured. */
+  async connect(): Promise<void> {
     if (this.disposed) return;
     this.cleanup();
 
-    const ws = new WebSocket(this.buildUrl());
+    let url: string;
+    try {
+      url = await this.buildUrl();
+    } catch {
+      // Ticket fetch failed — retry with backoff rather than connecting unauthenticated.
+      if (!this.disposed) this.scheduleReconnect();
+      return;
+    }
+    if (this.disposed) return;
+
+    const ws = new WebSocket(url);
 
     ws.onopen = () => {
       this.reconnectDelay = INITIAL_RECONNECT_DELAY;
@@ -125,7 +136,7 @@ export class GpsStreamService {
         this.reconnectDelay * 2,
         MAX_RECONNECT_DELAY
       );
-      this.connect();
+      void this.connect();
     }, this.reconnectDelay);
   }
 }

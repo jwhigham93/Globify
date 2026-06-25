@@ -56,11 +56,15 @@ type Verifier struct {
 }
 
 // NewVerifier constructs a Verifier and registers the Cognito JWKS endpoint
-// for cached, auto-refreshing key retrieval.
-func NewVerifier(cfg Config) *Verifier {
+// for cached, auto-refreshing key retrieval. It returns an error if the JWKS
+// URL cannot be registered (e.g. misconfigured region/pool ID), so callers can
+// fail fast at startup rather than surfacing the problem on every request.
+func NewVerifier(cfg Config) (*Verifier, error) {
 	cache := jwk.NewCache(context.Background())
-	_ = cache.Register(cfg.jwksURL(), jwk.WithMinRefreshInterval(15*time.Minute))
-	return &Verifier{cfg: cfg, cache: cache}
+	if err := cache.Register(cfg.jwksURL(), jwk.WithMinRefreshInterval(15*time.Minute)); err != nil {
+		return nil, fmt.Errorf("registering JWKS endpoint %q: %w", cfg.jwksURL(), err)
+	}
+	return &Verifier{cfg: cfg, cache: cache}, nil
 }
 
 // ValidateToken parses a token string, verifies its signature against the
@@ -117,14 +121,6 @@ func (v *Verifier) Middleware() func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
-}
-
-// CognitoMiddleware returns an HTTP middleware that validates Cognito access
-// tokens. Retained for backward compatibility; it constructs a Verifier
-// internally. Prefer sharing a single Verifier (NewVerifier) when the JWKS
-// cache should be reused across handlers (e.g. HTTP + WebSocket).
-func CognitoMiddleware(cfg Config) func(http.Handler) http.Handler {
-	return NewVerifier(cfg).Middleware()
 }
 
 // bearerToken extracts the token from an "Authorization: Bearer <token>" header.

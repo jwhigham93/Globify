@@ -3,6 +3,8 @@
  */
 import { GpsStreamService } from './gpsStreamService';
 
+const originalWebSocket = (global as unknown as { WebSocket?: unknown }).WebSocket;
+
 class FakeWebSocket {
   static CONNECTING = 0;
   static OPEN = 1;
@@ -32,36 +34,45 @@ beforeEach(() => {
   (global as unknown as { WebSocket: unknown }).WebSocket = FakeWebSocket;
 });
 
+afterEach(() => {
+  (global as unknown as { WebSocket?: unknown }).WebSocket = originalWebSocket;
+});
+
 describe('GpsStreamService', () => {
-  it('appends the access token as a query parameter on connect', () => {
-    const svc = new GpsStreamService('wss://api.test.com/api/v1/vehicles/stream', () => 'access-tok-123');
-    svc.connect();
+  it('appends a single-use ticket as a query parameter on connect', async () => {
+    const svc = new GpsStreamService(
+      'wss://api.test.com/api/v1/vehicles/stream',
+      async () => 'ticket-123'
+    );
+    await svc.connect();
 
     expect(FakeWebSocket.instances).toHaveLength(1);
     expect(FakeWebSocket.instances[0].url).toBe(
-      'wss://api.test.com/api/v1/vehicles/stream?token=access-tok-123'
+      'wss://api.test.com/api/v1/vehicles/stream?ticket=ticket-123'
     );
 
     svc.dispose();
   });
 
-  it('does not append a token parameter when no token is available', () => {
-    const svc = new GpsStreamService('wss://api.test.com/api/v1/vehicles/stream', () => null);
-    svc.connect();
+  it('does not append a ticket parameter when none is available', async () => {
+    const svc = new GpsStreamService(
+      'wss://api.test.com/api/v1/vehicles/stream',
+      async () => null
+    );
+    await svc.connect();
 
     expect(FakeWebSocket.instances[0].url).toBe('wss://api.test.com/api/v1/vehicles/stream');
 
     svc.dispose();
   });
 
-  it('reads a fresh token on each connect (token may rotate)', () => {
-    let current = 'first';
-    const svc = new GpsStreamService('wss://api.test.com/stream', () => current);
-    svc.connect();
-    current = 'second';
-    svc.connect();
+  it('fetches a fresh ticket on each connect (tickets are single-use)', async () => {
+    let n = 0;
+    const svc = new GpsStreamService('wss://api.test.com/stream', async () => `ticket-${++n}`);
+    await svc.connect();
+    await svc.connect();
 
-    expect(FakeWebSocket.instances[1].url).toBe('wss://api.test.com/stream?token=second');
+    expect(FakeWebSocket.instances[1].url).toBe('wss://api.test.com/stream?ticket=ticket-2');
 
     svc.dispose();
   });

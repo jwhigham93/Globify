@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/websocket"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/auth"
@@ -33,21 +34,17 @@ func newUpgrader(authDisabled bool) websocket.Upgrader {
 
 // HandleWebSocketUpgrade authenticates the request and upgrades it to a
 // WebSocket. Browsers cannot set an Authorization header on a WebSocket, so the
-// Cognito access token is passed as a "?token=" query parameter and validated
-// with the same Verifier used for HTTP requests. A nil verifier disables auth
-// (local dev only).
-func HandleWebSocketUpgrade(verifier *auth.Verifier, hub *wsHub.Hub) http.HandlerFunc {
-	upgrader := newUpgrader(verifier == nil)
+// client first obtains a short-lived single-use ticket from an authenticated
+// HTTP call and connects with "?ticket=". The ticket is redeemed (and deleted)
+// here, keeping the JWT out of the URL and any access logs. When authEnabled is
+// false (local dev) the ticket check is skipped.
+func HandleWebSocketUpgrade(pool *pgxpool.Pool, hub *wsHub.Hub, authEnabled bool) http.HandlerFunc {
+	upgrader := newUpgrader(!authEnabled)
 	return func(w http.ResponseWriter, r *http.Request) {
-		if verifier != nil {
-			tokenStr := r.URL.Query().Get("token")
-			if tokenStr == "" {
-				http.Error(w, `{"error":"missing token query parameter"}`, http.StatusUnauthorized)
-				return
-			}
-			if _, err := verifier.ValidateToken(r.Context(), tokenStr); err != nil {
-				log.Debug().Err(err).Msg("ws token validation failed")
-				http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
+		if authEnabled {
+			ticket := r.URL.Query().Get("ticket")
+			if _, err := auth.RedeemWSTicket(r.Context(), pool, ticket); err != nil {
+				http.Error(w, `{"error":"invalid or expired ticket"}`, http.StatusUnauthorized)
 				return
 			}
 		}
