@@ -8,7 +8,7 @@ const extra = Constants.expoConfig?.extra ?? {};
 
 export const config = {
   /** Base URL for the Go supply chain API (e.g. "https://api.example.com"). Empty = dev mode. */
-  apiBaseUrl: (extra.API_BASE_URL as string) || '',
+  apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || (extra.API_BASE_URL as string) || '',
 
   /** WebSocket URL for real-time GPS streaming. Derived from apiBaseUrl if not set. */
   wsUrl: (extra.WS_URL as string) || '',

@@ -82,6 +82,8 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi
 		r.Use(httprate.LimitByIP(100, time.Minute))
 		if verifier != nil {
 			r.Use(verifier.Middleware())
+		} else {
+			r.Use(auth.DevAuthMiddleware)
 		}
 
 		r.Route("/api/v1", func(r chi.Router) {
