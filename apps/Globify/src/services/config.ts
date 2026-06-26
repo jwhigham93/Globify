@@ -17,13 +17,13 @@ export const config = {
   tileCdnUrl: (extra.TILE_CDN_URL as string) || '',
 
   /** AWS Cognito User Pool ID */
-  cognitoUserPoolId: (extra.COGNITO_USER_POOL_ID as string) || '',
+  cognitoUserPoolId: process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID || (extra.COGNITO_USER_POOL_ID as string) || '',
 
   /** AWS Cognito App Client ID */
-  cognitoClientId: (extra.COGNITO_CLIENT_ID as string) || '',
+  cognitoClientId: process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID || (extra.COGNITO_CLIENT_ID as string) || '',
 
   /** AWS Cognito region */
-  cognitoRegion: (extra.COGNITO_REGION as string) || 'us-east-1',
+  cognitoRegion: process.env.EXPO_PUBLIC_COGNITO_REGION || (extra.COGNITO_REGION as string) || 'us-east-1',
 
   /** Whether the app is running in dev mode (no API, mock data) */
   get isDevMode(): boolean {
