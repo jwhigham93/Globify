@@ -15,9 +15,10 @@ import {
 import { useAuth } from './AuthProvider';
 
 export const SignInScreen: React.FC = () => {
-  const { signIn } = useAuth();
+  const { signIn, needsNewPassword, completeNewPassword } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -26,7 +27,6 @@ export const SignInScreen: React.FC = () => {
       setError('Please enter email and password.');
       return;
     }
-
     setError(null);
     setIsSubmitting(true);
     try {
@@ -37,6 +37,62 @@ export const SignInScreen: React.FC = () => {
       setIsSubmitting(false);
     }
   };
+
+  const handleSetNewPassword = async () => {
+    if (!newPassword.trim()) {
+      setError('Please enter a new password.');
+      return;
+    }
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await completeNewPassword(newPassword);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to set password. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (needsNewPassword) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.card}>
+          <Text style={styles.title}>Globify</Text>
+          <Text style={styles.subtitle}>Set a permanent password</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="New password"
+            placeholderTextColor="#888"
+            value={newPassword}
+            onChangeText={setNewPassword}
+            secureTextEntry
+            editable={!isSubmitting}
+            autoFocus
+          />
+
+          {error && <Text style={styles.errorText}>{error}</Text>}
+
+          <TouchableOpacity
+            style={[styles.button, isSubmitting && styles.buttonDisabled]}
+            onPress={handleSetNewPassword}
+            disabled={isSubmitting}
+            activeOpacity={0.7}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Set Password</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
 
   return (
     <KeyboardAvoidingView

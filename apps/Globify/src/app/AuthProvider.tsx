@@ -10,7 +10,9 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   token: string | null;
+  needsNewPassword: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  completeNewPassword: (newPassword: string) => Promise<void>;
   signOut: () => void;
 }
 
@@ -18,7 +20,9 @@ const AuthContext = createContext<AuthContextValue>({
   isAuthenticated: false,
   isLoading: true,
   token: null,
+  needsNewPassword: false,
   signIn: async () => { /* noop default */ },
+  completeNewPassword: async () => { /* noop default */ },
   signOut: () => { /* noop default */ },
 });
 
@@ -27,6 +31,7 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [needsNewPassword, setNeedsNewPassword] = useState(false);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Schedule a token refresh 4 minutes before expiry
@@ -71,7 +76,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleSignIn = useCallback(
     async (email: string, password: string) => {
-      const newToken = await authService.signIn(email, password);
+      try {
+        const newToken = await authService.signIn(email, password);
+        setToken(newToken);
+        scheduleRefresh();
+      } catch (err: any) {
+        if (err?.code === 'NEW_PASSWORD_REQUIRED') {
+          setNeedsNewPassword(true);
+          return;
+        }
+        throw err;
+      }
+    },
+    [scheduleRefresh]
+  );
+
+  const handleCompleteNewPassword = useCallback(
+    async (newPassword: string) => {
+      const newToken = await authService.completeNewPassword(newPassword);
+      setNeedsNewPassword(false);
       setToken(newToken);
       scheduleRefresh();
     },
@@ -90,7 +113,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isAuthenticated: !config.isAuthEnabled || !!token,
     isLoading,
     token,
+    needsNewPassword,
     signIn: handleSignIn,
+    completeNewPassword: handleCompleteNewPassword,
     signOut: handleSignOut,
   };
 

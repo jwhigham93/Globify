@@ -11,6 +11,8 @@ import {
 import { config } from './config';
 
 let userPool: CognitoUserPool | null = null;
+// Held across signIn → completeNewPassword calls
+let pendingUser: CognitoUser | null = null;
 
 function getUserPool(): CognitoUserPool {
   if (!userPool) {
@@ -38,6 +40,35 @@ export function signIn(email: string, password: string): Promise<string> {
 
     user.authenticateUser(authDetails, {
       onSuccess: (session: CognitoUserSession) => {
+        pendingUser = null;
+        resolve(session.getAccessToken().getJwtToken());
+      },
+      onFailure: (err: Error) => {
+        reject(err);
+      },
+      newPasswordRequired: (_userAttributes: object, _requiredAttributes: object) => {
+        pendingUser = user;
+        const err = new Error('New password required');
+        (err as any).code = 'NEW_PASSWORD_REQUIRED';
+        reject(err);
+      },
+    });
+  });
+}
+
+/**
+ * Complete the NEW_PASSWORD_REQUIRED challenge after admin-created sign-in.
+ * Must be called after signIn rejects with code === 'NEW_PASSWORD_REQUIRED'.
+ */
+export function completeNewPassword(newPassword: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!pendingUser) {
+      reject(new Error('No pending password challenge'));
+      return;
+    }
+    pendingUser.completeNewPasswordChallenge(newPassword, {}, {
+      onSuccess: (session: CognitoUserSession) => {
+        pendingUser = null;
         resolve(session.getAccessToken().getJwtToken());
       },
       onFailure: (err: Error) => {
