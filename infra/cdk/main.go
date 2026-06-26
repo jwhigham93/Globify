@@ -132,10 +132,9 @@ func main() {
 		stacks.NewLambdaApiStack(app, "SupplyChainLambdaApi", &stacks.LambdaApiStackProps{
 			StackProps: awscdk.StackProps{
 				Env:         env,
-				Description: jsii.String("Supply Chain API — Lambda + Function URL (ultra-lite)"),
+				Description: jsii.String("Supply Chain API — Lambda + API Gateway HTTP API (ultra-lite)"),
 			},
-			EcrRepository: containerStack.Repository,
-			WebOrigin:     webOrigin,
+			WebOrigin: webOrigin,
 		})
 	}
 
@@ -162,7 +161,7 @@ func main() {
 			Description: jsii.String("Supply Chain — monthly cost budget with email alerts"),
 		},
 		MonthlyLimitUSD: budgetLimit,
-		AlertEmail:      "your-email@example.com", // ← replace with your email
+		AlertEmail:      "jwhigham93@gmail.com",
 	})
 
 	app.Synth(nil)
