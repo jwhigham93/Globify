@@ -10,8 +10,8 @@ export const config = {
   /** Base URL for the Go supply chain API (e.g. "https://api.example.com"). Empty = dev mode. */
   apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || (extra.API_BASE_URL as string) || '',
 
-  /** WebSocket URL for real-time GPS streaming. Derived from apiBaseUrl if not set. */
-  wsUrl: (extra.WS_URL as string) || '',
+  /** WebSocket URL for real-time GPS streaming. Derived from apiBaseUrl if not set. Empty string explicitly disables streaming. */
+  wsUrl: process.env.EXPO_PUBLIC_WS_URL ?? (extra.WS_URL as string) ?? '',
 
   /** CDN base URL for progressive NASA tile imagery. Falls back to localhost:3001 in dev mode. */
   tileCdnUrl: (extra.TILE_CDN_URL as string) || '',
@@ -35,8 +35,10 @@ export const config = {
     return !!this.cognitoUserPoolId && !!this.cognitoClientId;
   },
 
-  /** Resolved WebSocket URL — derives ws(s):// from apiBaseUrl if wsUrl not set */
+  /** Resolved WebSocket URL — derives ws(s):// from apiBaseUrl if wsUrl not set. Returns empty string (disabled) when EXPO_PUBLIC_WS_URL is explicitly empty. */
   get resolvedWsUrl(): string {
+    // If EXPO_PUBLIC_WS_URL was explicitly set (even to ''), respect it — don't derive.
+    if (process.env.EXPO_PUBLIC_WS_URL !== undefined) return this.wsUrl;
     if (this.wsUrl) return this.wsUrl;
     if (!this.apiBaseUrl) return '';
     return this.apiBaseUrl

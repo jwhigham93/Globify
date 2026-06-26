@@ -28,6 +28,7 @@ type Listener = (msg: WsMessage) => void;
 
 const INITIAL_RECONNECT_DELAY = 1_000;
 const MAX_RECONNECT_DELAY = 30_000;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 export class GpsStreamService {
   private url: string;
@@ -37,6 +38,7 @@ export class GpsStreamService {
   private reconnectDelay = INITIAL_RECONNECT_DELAY;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
+  private reconnectAttempts = 0;
 
   /**
    * @param url Base WebSocket URL.
@@ -78,6 +80,7 @@ export class GpsStreamService {
 
     ws.onopen = () => {
       this.reconnectDelay = INITIAL_RECONNECT_DELAY;
+      this.reconnectAttempts = 0;
     };
 
     ws.onmessage = (event) => {
@@ -131,6 +134,12 @@ export class GpsStreamService {
   }
 
   private scheduleReconnect(): void {
+    this.reconnectAttempts += 1;
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      // WebSocket endpoint unavailable (e.g. HTTP API proxy without WS support).
+      // Stop retrying — the app continues with static REST data.
+      return;
+    }
     this.reconnectTimer = setTimeout(() => {
       this.reconnectDelay = Math.min(
         this.reconnectDelay * 2,
