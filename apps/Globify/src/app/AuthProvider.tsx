@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import * as authService from '../services/authService';
+import { setTokenGetter } from '../services/apiClient';
 import { config } from '../services/config';
 
 interface AuthContextValue {
@@ -24,6 +25,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Keep apiClient in sync so all API calls and WS ticket requests have the token
+  useEffect(() => {
+    setTokenGetter(() => token);
+  }, [token]);
 
   const scheduleRefresh = useCallback(() => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
