@@ -148,3 +148,8 @@ opencode.json
 
 # logs
 error.log
+
+# Python virtualenvs
+myenv/
+venv/
+.venv/

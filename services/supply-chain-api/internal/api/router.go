@@ -137,10 +137,15 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, gorillaHub *wsHub.Hu
 	}
 
 	// ── API Gateway WebSocket event routes (via Lambda Web Adapter) ──
-	// LWA maps $connect → POST /_ws/connect, $disconnect → POST /_ws/disconnect,
-	// $default → POST /_ws/default. These are only reachable inside Lambda.
+	// WebSocket event routes inside Lambda. LWA v0.8+ is supposed to map
+	// $connect → POST /_ws/connect, but in practice routes non-HTTP Lambda events
+	// to POST /events (its pass-through default). We register both paths so the
+	// handler works regardless of LWA version behaviour.
 	if ddbHub != nil {
 		authEnabled := verifier != nil
+		// Primary: LWA pass-through default for non-HTTP events.
+		r.Post("/events", HandleLambdaEvents(pool, ddbHub, authEnabled))
+		// Fallback: explicit LWA WebSocket path mappings (kept for future-proofing).
 		r.With(httprate.LimitByIP(60, time.Minute)).
 			Post("/_ws/connect", HandleWsConnect(pool, ddbHub, authEnabled))
 		r.Post("/_ws/disconnect", HandleWsDisconnect(ddbHub))

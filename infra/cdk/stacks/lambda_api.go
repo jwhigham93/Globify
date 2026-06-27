@@ -7,6 +7,8 @@ import (
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2integrations"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsevents"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awseventstargets"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsssm"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
@@ -182,6 +184,21 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 	// These use CDK tokens resolved at deploy time (not synth time).
 	fn.AddEnvironment(jsii.String("DYNAMODB_WS_TABLE"), wsTable.TableName(), nil)
 	fn.AddEnvironment(jsii.String("APIGW_WS_ENDPOINT"), wsStage.CallbackUrl(), nil)
+
+	// GPS simulator: EventBridge rule fires every 2 minutes, invoking the same
+	// Lambda with a simulator payload. LWA routes it to POST /events where
+	// RunGPSSimulator updates truck positions and broadcasts via WebSocket.
+	simulatorRule := awsevents.NewRule(stack, jsii.String("GPSSimulatorRule"), &awsevents.RuleProps{
+		Schedule:    awsevents.Schedule_Rate(awscdk.Duration_Minutes(jsii.Number(2))),
+		Description: jsii.String("Simulates GPS movement for active vehicles every 2 minutes"),
+	})
+	simulatorRule.AddTarget(awseventstargets.NewLambdaFunction(fn, &awseventstargets.LambdaFunctionProps{
+		Event: awsevents.RuleTargetInput_FromObject(map[string]interface{}{
+			"source":      "supply-chain.simulator",
+			"detail-type": "SimulateGPS",
+			"detail":      map[string]interface{}{},
+		}),
+	}))
 
 	// ── Stack outputs ─────────────────────────────────────────────────────
 	awscdk.NewCfnOutput(stack, jsii.String("ApiGatewayUrl"), &awscdk.CfnOutputProps{
