@@ -15,6 +15,7 @@ import (
 
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/auth"
 	wsHub "github.com/jwhig/jw-dev/services/supply-chain-api/internal/ws"
+	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wshub"
 )
 
 // defaultDevOrigin is used when ALLOWED_ORIGINS is unset (local Expo web dev).
@@ -44,9 +45,10 @@ func parseAllowedOrigins() []string {
 
 // NewRouter sets up the chi router with all routes, middleware, and CORS.
 //
-// verifier validates Cognito access tokens; pass nil to disable authentication
-// (local dev only — the server only does this when AUTH_DISABLED=true).
-func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi.Mux {
+// gorillaHub is the local-dev gorilla WebSocket hub (nil in production).
+// ddbHub is the DynamoDB-backed hub for Lambda/API Gateway (nil in local dev).
+// Pass exactly one non-nil hub; the other should be nil.
+func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, gorillaHub *wsHub.Hub, ddbHub *wshub.Hub) *chi.Mux {
 	r := chi.NewRouter()
 
 	// ── Global middleware ─────────────────────────────────────────────
@@ -65,14 +67,16 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi
 	}).Handler)
 
 	// ── Health checks (no auth — infra probes) ───────────────────────
-	// Liveness (/healthz) and readiness (/readyz) must be reachable by
-	// orchestrator probes (e.g. the EKS readinessProbe in k8s/deployment.yaml)
-	// without credentials. /readyz only exposes DB-up status and a WS client
-	// count — operational data, not user data — so it stays public.
 	r.Get("/healthz", HealthzHandler())
-	r.Get("/readyz", ReadyzHandler(pool, hub))
+	r.Get("/readyz", ReadyzHandler(pool, gorillaHub))
 
 	h := NewHandlers(pool)
+	// Set the broadcaster: DynamoDB hub in production, gorilla hub in local dev.
+	if ddbHub != nil {
+		h.hub = ddbHub
+	} else if gorillaHub != nil {
+		h.hub = gorillaHub
+	}
 
 	// ── Authenticated API routes ─────────────────────────────────────
 	r.Group(func(r chi.Router) {
@@ -126,13 +130,21 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi
 		r.Post("/", h.HandleIngestGpsPing)
 	})
 
-	// ── WebSocket stream (single-use ticket auth via ?ticket=) ───────
-	// Rate-limited per IP: redemption runs a DB DELETE...RETURNING, so cap
-	// unauthenticated probing of random ?ticket= values before it hits the DB.
-	if hub != nil {
+	// ── Local-dev WebSocket upgrade (gorilla, persistent connection) ─
+	if gorillaHub != nil {
 		r.With(httprate.LimitByIP(60, time.Minute)).
-			Get("/api/v1/vehicles/stream", HandleWebSocketUpgrade(pool, hub, verifier != nil))
-		h.hub = hub
+			Get("/api/v1/vehicles/stream", HandleWebSocketUpgrade(pool, gorillaHub, verifier != nil))
+	}
+
+	// ── API Gateway WebSocket event routes (via Lambda Web Adapter) ──
+	// LWA maps $connect → POST /_ws/connect, $disconnect → POST /_ws/disconnect,
+	// $default → POST /_ws/default. These are only reachable inside Lambda.
+	if ddbHub != nil {
+		authEnabled := verifier != nil
+		r.With(httprate.LimitByIP(60, time.Minute)).
+			Post("/_ws/connect", HandleWsConnect(pool, ddbHub, authEnabled))
+		r.Post("/_ws/disconnect", HandleWsDisconnect(ddbHub))
+		r.Post("/_ws/default", HandleWsDefault())
 	}
 
 	return r

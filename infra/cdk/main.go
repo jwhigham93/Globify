@@ -129,12 +129,26 @@ func main() {
 			EcrRepository:    containerStack.Repository,
 		})
 	case "ultra-lite":
+		// Cognito values passed as CDK context so they survive re-deploys without
+		// being hardcoded in source. Example:
+		//   cdk deploy -c profile=ultra-lite \
+		//     -c cognitoUserPoolId=us-east-1_xxx -c cognitoClientId=xxx
+		cognitoUserPoolID := ""
+		cognitoClientID := ""
+		if v, ok := app.Node().TryGetContext(jsii.String("cognitoUserPoolId")).(string); ok {
+			cognitoUserPoolID = v
+		}
+		if v, ok := app.Node().TryGetContext(jsii.String("cognitoClientId")).(string); ok {
+			cognitoClientID = v
+		}
 		stacks.NewLambdaApiStack(app, "SupplyChainLambdaApi", &stacks.LambdaApiStackProps{
 			StackProps: awscdk.StackProps{
 				Env:         env,
 				Description: jsii.String("Supply Chain API — Lambda + API Gateway HTTP API (ultra-lite)"),
 			},
-			WebOrigin: webOrigin,
+			WebOrigin:         webOrigin,
+			CognitoUserPoolID: cognitoUserPoolID,
+			CognitoClientID:   cognitoClientID,
 		})
 	}
 

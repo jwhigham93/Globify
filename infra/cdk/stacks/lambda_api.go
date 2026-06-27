@@ -2,6 +2,7 @@ package stacks
 
 import (
 	"github.com/aws/aws-cdk-go/awscdk/v2"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2"
@@ -18,16 +19,22 @@ type LambdaApiStackProps struct {
 	// the web app). Used for both the app-level ALLOWED_ORIGINS env var and the
 	// HTTP API CORS config. Never "*". If empty, falls back to localhost dev.
 	WebOrigin *string
+	// Cognito values are passed as CDK context (-c flag) so they survive
+	// re-deploys without being hardcoded in source. Empty strings are safe —
+	// the Lambda will reject requests with a 401 when Cognito is not wired up.
+	CognitoUserPoolID string
+	CognitoClientID   string
 }
 
 // LambdaApiStack deploys the Supply Chain API as an AWS Lambda function
 // behind an API Gateway HTTP API. Uses zip asset + Lambda Web Adapter layer.
 // The existing Go HTTP server runs unmodified; LWA proxies invocations to HTTP.
 //
-// Cost: ~$1/million requests (HTTP API) + Lambda free tier.
+// Cost: ~$1/million requests (HTTP API) + Lambda free tier + DynamoDB free tier.
 type LambdaApiStack struct {
 	awscdk.Stack
 	ApiUrl *string
+	WsUrl  *string
 }
 
 func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiStackProps) *LambdaApiStack {
@@ -43,6 +50,20 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 	ssmParamName := "/supply-chain/DATABASE_URL"
 	ssmParam := awsssm.StringParameter_FromSecureStringParameterAttributes(stack, jsii.String("DbUrlParam"), &awsssm.SecureStringParameterAttributes{
 		ParameterName: jsii.String(ssmParamName),
+	})
+
+	// ── DynamoDB table for WebSocket connection IDs ──────────────────────
+	// Pay-per-request billing; TTL auto-expires stale connections.
+	// Sits entirely within the DynamoDB always-free tier for portfolio scale.
+	wsTable := awsdynamodb.NewTable(stack, jsii.String("WsConnections"), &awsdynamodb.TableProps{
+		TableName: jsii.String("ws-connections"),
+		PartitionKey: &awsdynamodb.Attribute{
+			Name: jsii.String("connectionId"),
+			Type: awsdynamodb.AttributeType_STRING,
+		},
+		TimeToLiveAttribute: jsii.String("expiresAt"),
+		BillingMode:         awsdynamodb.BillingMode_PAY_PER_REQUEST,
+		RemovalPolicy:       awscdk.RemovalPolicy_DESTROY,
 	})
 
 	// ── AWS Lambda Web Adapter layer (v1.0.1, x86_64) ───────────────────
@@ -66,11 +87,13 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 			"AWS_LWA_PORT":         jsii.String("8080"),
 			"PORT":                 jsii.String("8080"),
 			"LOG_FORMAT":           jsii.String("json"),
-			"COGNITO_USER_POOL_ID": jsii.String(""), // set after deploy
-			"COGNITO_CLIENT_ID":    jsii.String(""), // set after deploy
+			"COGNITO_USER_POOL_ID": jsii.String(props.CognitoUserPoolID),
+			"COGNITO_CLIENT_ID":    jsii.String(props.CognitoClientID),
 			"COGNITO_REGION":       jsii.String("us-east-1"),
 			"ALLOWED_ORIGINS":      webOrigin,
 			"SSM_DATABASE_URL":     jsii.String(ssmParamName),
+			// DYNAMODB_WS_TABLE and APIGW_WS_ENDPOINT are set below after the
+			// WebSocket API is created, since they depend on CDK token values.
 		},
 	})
 
@@ -86,7 +109,10 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 		},
 	}))
 
-	// ── API Gateway HTTP API ──────────────────────────────────────────────
+	// Grant Lambda DynamoDB read/write for WebSocket connection storage
+	wsTable.GrantReadWriteData(fn)
+
+	// ── API Gateway HTTP API (REST endpoints) ────────────────────────────
 	// HTTP API is simpler and cheaper than REST API ($1/million vs $3.50/million).
 	// CORS is configured here; the Go app also validates origins in-process.
 	httpApi := awsapigatewayv2.NewHttpApi(stack, jsii.String("SupplyChainHttpApi"), &awsapigatewayv2.HttpApiProps{
@@ -108,7 +134,7 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 	})
 
 	// Proxy ALL routes to the Lambda (the Go router handles routing internally)
-	integration := awsapigatewayv2integrations.NewHttpLambdaIntegration(
+	httpIntegration := awsapigatewayv2integrations.NewHttpLambdaIntegration(
 		jsii.String("LambdaIntegration"),
 		fn,
 		nil,
@@ -116,14 +142,57 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 	httpApi.AddRoutes(&awsapigatewayv2.AddRoutesOptions{
 		Path:        jsii.String("/{proxy+}"),
 		Methods:     &[]awsapigatewayv2.HttpMethod{awsapigatewayv2.HttpMethod_ANY},
-		Integration: integration,
+		Integration: httpIntegration,
 	})
+
+	// ── API Gateway WebSocket API (GPS streaming) ────────────────────────
+	// All three routes ($connect, $disconnect, $default) invoke the same Lambda.
+	// LWA maps them to POST /_ws/connect, /_ws/disconnect, /_ws/default.
+	wsIntegration := awsapigatewayv2integrations.NewWebSocketLambdaIntegration(
+		jsii.String("WsLambdaIntegration"),
+		fn,
+		nil,
+	)
+	wsApi := awsapigatewayv2.NewWebSocketApi(stack, jsii.String("SupplyChainWsApi"), &awsapigatewayv2.WebSocketApiProps{
+		ApiName: jsii.String("supply-chain-ws"),
+		ConnectRouteOptions: &awsapigatewayv2.WebSocketRouteOptions{
+			Integration: wsIntegration,
+		},
+		DisconnectRouteOptions: &awsapigatewayv2.WebSocketRouteOptions{
+			Integration: wsIntegration,
+		},
+		DefaultRouteOptions: &awsapigatewayv2.WebSocketRouteOptions{
+			Integration: wsIntegration,
+		},
+	})
+
+	wsStage := awsapigatewayv2.NewWebSocketStage(stack, jsii.String("WsApiProdStage"), &awsapigatewayv2.WebSocketStageProps{
+		WebSocketApi: wsApi,
+		StageName:    jsii.String("production"),
+		AutoDeploy:   jsii.Bool(true),
+	})
+
+	// Grant Lambda permission to post messages back to connected WebSocket clients
+	fn.AddToRolePolicy(awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
+		Actions:   &[]*string{jsii.String("execute-api:ManageConnections")},
+		Resources: &[]*string{jsii.String("arn:aws:execute-api:*:*:*/@connections/*")},
+	}))
+
+	// Wire DynamoDB table name and WebSocket callback URL into Lambda env vars.
+	// These use CDK tokens resolved at deploy time (not synth time).
+	fn.AddEnvironment(jsii.String("DYNAMODB_WS_TABLE"), wsTable.TableName(), nil)
+	fn.AddEnvironment(jsii.String("APIGW_WS_ENDPOINT"), wsStage.CallbackUrl(), nil)
 
 	// ── Stack outputs ─────────────────────────────────────────────────────
 	awscdk.NewCfnOutput(stack, jsii.String("ApiGatewayUrl"), &awscdk.CfnOutputProps{
 		Value:       httpApi.ApiEndpoint(),
 		Description: jsii.String("API Gateway HTTP API endpoint"),
 		ExportName:  jsii.String("SupplyChain-ApiUrl"),
+	})
+
+	awscdk.NewCfnOutput(stack, jsii.String("WebSocketUrl"), &awscdk.CfnOutputProps{
+		Value:       wsStage.Url(),
+		Description: jsii.String("API Gateway WebSocket URL (set as EXPO_PUBLIC_WS_URL GitHub secret)"),
 	})
 
 	awscdk.NewCfnOutput(stack, jsii.String("LambdaFunctionName"), &awscdk.CfnOutputProps{
@@ -144,5 +213,6 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 	return &LambdaApiStack{
 		Stack:  stack,
 		ApiUrl: httpApi.ApiEndpoint(),
+		WsUrl:  wsStage.Url(),
 	}
 }
