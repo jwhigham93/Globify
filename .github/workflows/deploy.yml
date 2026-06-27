@@ -41,6 +41,7 @@ jobs:
           EXPO_PUBLIC_COGNITO_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_CLIENT_ID }}
           EXPO_PUBLIC_COGNITO_REGION: ${{ secrets.EXPO_PUBLIC_COGNITO_REGION }}
           EXPO_PUBLIC_WS_URL: ${{ secrets.EXPO_PUBLIC_WS_URL }}
+          EXPO_PUBLIC_COGNITO_DOMAIN: ${{ secrets.EXPO_PUBLIC_COGNITO_DOMAIN }}
         run: pnpm nx export Globify -- --platform web
 
       - name: Configure AWS credentials
@@ -172,6 +173,7 @@ jobs:
 
       - name: CDK deploy
         env:
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           CDK_COGNITO_USER_POOL_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_USER_POOL_ID }}
           CDK_COGNITO_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_CLIENT_ID }}
         run: |

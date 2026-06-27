@@ -24,6 +24,7 @@ export const config = {
 
   /** AWS Cognito region */
   cognitoRegion: process.env.EXPO_PUBLIC_COGNITO_REGION || (extra.COGNITO_REGION as string) || 'us-east-1',
+  cognitoDomain: process.env.EXPO_PUBLIC_COGNITO_DOMAIN || (extra.COGNITO_DOMAIN as string) || '',
 
   /** Whether the app is running in dev mode (no API, mock data) */
   get isDevMode(): boolean {

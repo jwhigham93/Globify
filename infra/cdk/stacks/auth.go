@@ -7,20 +7,39 @@ import (
 	"github.com/aws/jsii-runtime-go"
 )
 
-// AuthStack creates a Cognito User Pool and App Client for mobile authentication.
+// AuthStackProps holds credentials needed to configure federated identity providers.
+type AuthStackProps struct {
+	awscdk.StackProps
+	// GoogleClientId is the OAuth 2.0 client ID from Google Cloud Console.
+	GoogleClientId string
+	// GoogleClientSecret is the OAuth 2.0 client secret (passed via CDK context or env var).
+	GoogleClientSecret string
+	// WebOrigin is the CloudFront URL used as the OAuth callback + logout URL.
+	WebOrigin string
+}
+
+// AuthStack creates a Cognito User Pool with Google social sign-in via the
+// Hosted UI. The authorization_code flow is used: the browser redirects to
+// Cognito, authenticates with Google, then returns to the app with a code that
+// is exchanged server-to-server for tokens.
 type AuthStack struct {
 	awscdk.Stack
 	UserPool  awscognito.UserPool
 	AppClient awscognito.UserPoolClient
 }
 
-func NewAuthStack(scope constructs.Construct, id string, props *awscdk.StackProps) *AuthStack {
-	stack := awscdk.NewStack(scope, &id, props)
+func NewAuthStack(scope constructs.Construct, id string, props *AuthStackProps) *AuthStack {
+	stack := awscdk.NewStack(scope, &id, &props.StackProps)
 
-	// ── User Pool — email sign-in, email verification required ──
+	callbackUrl := "https://d2oqi8rhtjt2i6.cloudfront.net"
+	if props.WebOrigin != "" {
+		callbackUrl = props.WebOrigin
+	}
+
+	// ── User Pool ────────────────────────────────────────────────────────────
 	userPool := awscognito.NewUserPool(stack, jsii.String("SupplyChainUserPool"), &awscognito.UserPoolProps{
-		UserPoolName: jsii.String("supply-chain-users"),
-		SelfSignUpEnabled: jsii.Bool(false), // admin-only — create users via CLI
+		UserPoolName:      jsii.String("supply-chain-users"),
+		SelfSignUpEnabled: jsii.Bool(false),
 		SignInAliases: &awscognito.SignInAliases{
 			Email: jsii.Bool(true),
 		},
@@ -40,34 +59,69 @@ func NewAuthStack(scope constructs.Construct, id string, props *awscdk.StackProp
 			RequireDigits:    jsii.Bool(true),
 			RequireSymbols:   jsii.Bool(true),
 		},
-		// Optional TOTP (authenticator app) MFA — no SMS, so no per-message cost.
-		// Users may enrol a second factor; not forced, to keep demo sign-in simple.
 		Mfa: awscognito.Mfa_OPTIONAL,
 		MfaSecondFactor: &awscognito.MfaSecondFactor{
 			Otp: jsii.Bool(true),
 			Sms: jsii.Bool(false),
 		},
-		// Note: Cognito advanced security / threat protection (compromised-credential
-		// detection, adaptive auth) adds ~$0.05/MAU and is intentionally left off to
-		// preserve the ultra-lite cost target. Enable via FeaturePlan if needed.
 		AccountRecovery: awscognito.AccountRecovery_EMAIL_ONLY,
-		RemovalPolicy:   awscdk.RemovalPolicy_DESTROY, // dev — change for prod
+		RemovalPolicy:   awscdk.RemovalPolicy_DESTROY,
 	})
 
-	// ── App Client — no secret, SRP + password auth flows ───────
+	// ── Hosted UI domain (globify-auth.auth.us-east-1.amazoncognito.com) ────
+	userPool.AddDomain(jsii.String("GlobifyAuthDomain"), &awscognito.UserPoolDomainOptions{
+		CognitoDomain: &awscognito.CognitoDomainOptions{
+			DomainPrefix: jsii.String("globify-auth"),
+		},
+	})
+
+	// ── Google Identity Provider ─────────────────────────────────────────────
+	googleIDP := awscognito.NewUserPoolIdentityProviderGoogle(stack, jsii.String("GoogleIDP"), &awscognito.UserPoolIdentityProviderGoogleProps{
+		UserPool:          userPool,
+		ClientId:          jsii.String(props.GoogleClientId),
+		ClientSecretValue: awscdk.SecretValue_UnsafePlainText(jsii.String(props.GoogleClientSecret)),
+		Scopes:            &[]*string{jsii.String("openid"), jsii.String("email"), jsii.String("profile")},
+		AttributeMapping: &awscognito.AttributeMapping{
+			Email:          awscognito.ProviderAttribute_GOOGLE_EMAIL(),
+			Fullname:       awscognito.ProviderAttribute_GOOGLE_NAME(),
+			ProfilePicture: awscognito.ProviderAttribute_GOOGLE_PICTURE(),
+		},
+	})
+
+	// ── App Client — authorization_code flow with Google ────────────────────
 	appClient := userPool.AddClient(jsii.String("GlobifyAppClient"), &awscognito.UserPoolClientOptions{
 		UserPoolClientName: jsii.String("globify-app"),
-		GenerateSecret:     jsii.Bool(false), // required for mobile/SPA
-		AuthFlows: &awscognito.AuthFlow{
-			UserPassword: jsii.Bool(true), // USER_PASSWORD_AUTH
-			UserSrp:      jsii.Bool(true), // USER_SRP_AUTH
+		GenerateSecret:     jsii.Bool(false),
+		SupportedIdentityProviders: &[]awscognito.UserPoolClientIdentityProvider{
+			awscognito.UserPoolClientIdentityProvider_GOOGLE(),
 		},
-		IdTokenValidity:      awscdk.Duration_Hours(jsii.Number(1)),
-		RefreshTokenValidity: awscdk.Duration_Days(jsii.Number(30)),
+		OAuth: &awscognito.OAuthSettings{
+			Flows: &awscognito.OAuthFlows{
+				AuthorizationCodeGrant: jsii.Bool(true),
+			},
+			Scopes: &[]awscognito.OAuthScope{
+				awscognito.OAuthScope_OPENID(),
+				awscognito.OAuthScope_EMAIL(),
+				awscognito.OAuthScope_PROFILE(),
+			},
+			CallbackUrls: &[]*string{
+				jsii.String(callbackUrl),
+				jsii.String("http://localhost:8081"),
+			},
+			LogoutUrls: &[]*string{
+				jsii.String(callbackUrl),
+				jsii.String("http://localhost:8081"),
+			},
+		},
+		IdTokenValidity:            awscdk.Duration_Hours(jsii.Number(1)),
+		RefreshTokenValidity:       awscdk.Duration_Days(jsii.Number(30)),
 		PreventUserExistenceErrors: jsii.Bool(true),
 	})
 
-	// ── Stack outputs ────────────────────────────────────────────
+	// App client must be created after the IDP is registered
+	appClient.Node().AddDependency(googleIDP)
+
+	// ── Stack outputs ────────────────────────────────────────────────────────
 	awscdk.NewCfnOutput(stack, jsii.String("UserPoolId"), &awscdk.CfnOutputProps{
 		Value:       userPool.UserPoolId(),
 		Description: jsii.String("Cognito User Pool ID"),
@@ -85,9 +139,9 @@ func NewAuthStack(scope constructs.Construct, id string, props *awscdk.StackProp
 		Description: jsii.String("AWS region for Cognito"),
 	})
 
-	awscdk.NewCfnOutput(stack, jsii.String("CreateUserCommand"), &awscdk.CfnOutputProps{
-		Value:       jsii.String("aws cognito-idp admin-create-user --user-pool-id <POOL_ID> --username user@example.com --temporary-password 'TempPass1!' --user-attributes Name=email,Value=user@example.com Name=email_verified,Value=true"),
-		Description: jsii.String("Command to create a new user (admin-only signup)"),
+	awscdk.NewCfnOutput(stack, jsii.String("HostedUiDomain"), &awscdk.CfnOutputProps{
+		Value:       jsii.String("https://globify-auth.auth.us-east-1.amazoncognito.com"),
+		Description: jsii.String("Cognito Hosted UI base URL (set as EXPO_PUBLIC_COGNITO_DOMAIN GitHub secret)"),
 	})
 
 	return &AuthStack{

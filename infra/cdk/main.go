@@ -39,10 +39,17 @@ func main() {
 		env.Account = jsii.String(acct)
 	}
 
-	// ── 1. Auth — Cognito User Pool (all profiles) ──────────────
-	stacks.NewAuthStack(app, "SupplyChainAuth", &awscdk.StackProps{
-		Env:         env,
-		Description: jsii.String("Supply Chain API — Cognito User Pool (admin-only signup)"),
+	// ── 1. Auth — Cognito User Pool with Google social sign-in ──
+	// Google client ID is public; secret comes from GOOGLE_CLIENT_SECRET env var
+	// set by the deploy-infra CI job (GOOGLE_CLIENT_SECRET GitHub secret).
+	stacks.NewAuthStack(app, "SupplyChainAuth", &stacks.AuthStackProps{
+		StackProps: awscdk.StackProps{
+			Env:         env,
+			Description: jsii.String("Cognito User Pool with Google social sign-in"),
+		},
+		GoogleClientId:     "776282525076-fnpsus9c860a6c5kvujodm25hifadb3i.apps.googleusercontent.com",
+		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		WebOrigin:          "https://d2oqi8rhtjt2i6.cloudfront.net",
 	})
 
 	// ── 2. Container — ECR repository (all profiles) ────────────

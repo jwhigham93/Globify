@@ -1,138 +1,161 @@
 /**
- * Cognito authentication service using amazon-cognito-identity-js.
- * Handles sign-in, sign-out, token retrieval, and automatic session refresh.
+ * OAuth 2.0 authentication service via Cognito Hosted UI.
+ * Supports Google (and future Apple) sign-in using authorization_code flow.
+ * No third-party auth library required — all token exchange is plain fetch().
  */
-import {
-  CognitoUserPool,
-  CognitoUser,
-  AuthenticationDetails,
-  CognitoUserSession,
-} from 'amazon-cognito-identity-js';
 import { config } from './config';
 
-let userPool: CognitoUserPool | null = null;
-// Held across signIn → completeNewPassword calls
-let pendingUser: CognitoUser | null = null;
+const STORAGE_KEYS = {
+  accessToken: 'auth.access_token',
+  idToken: 'auth.id_token',
+  refreshToken: 'auth.refresh_token',
+  expiresAt: 'auth.expires_at',
+} as const;
 
-function getUserPool(): CognitoUserPool {
-  if (!userPool) {
-    userPool = new CognitoUserPool({
-      UserPoolId: config.cognitoUserPoolId,
-      ClientId: config.cognitoClientId,
-    });
+// ── Storage helpers (localStorage on web, no-op on native) ───────────────────
+
+function store(key: string, value: string): void {
+  if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+}
+
+function load(key: string): string | null {
+  if (typeof localStorage !== 'undefined') return localStorage.getItem(key);
+  return null;
+}
+
+function remove(key: string): void {
+  if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
+}
+
+function clearTokens(): void {
+  Object.values(STORAGE_KEYS).forEach(remove);
+}
+
+// ── OAuth URL helpers ─────────────────────────────────────────────────────────
+
+function callbackUrl(): string {
+  if (typeof window !== 'undefined') return window.location.origin;
+  return 'http://localhost:8081';
+}
+
+function hostedUiBase(): string {
+  return config.cognitoDomain;
+}
+
+/** Redirect the browser to Cognito Hosted UI to sign in with Google. */
+export function signInWithGoogle(): void {
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: config.cognitoClientId,
+    redirect_uri: callbackUrl(),
+    identity_provider: 'Google',
+    scope: 'openid email profile',
+  });
+  window.location.href = `${hostedUiBase()}/oauth2/authorize?${params}`;
+}
+
+/** Exchange an authorization code for tokens and persist them. Returns access token. */
+export async function handleOAuthCallback(code: string): Promise<string> {
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: callbackUrl(),
+    client_id: config.cognitoClientId,
+  });
+
+  const res = await fetch(`${hostedUiBase()}/oauth2/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Token exchange failed: ${text}`);
   }
-  return userPool;
+
+  const data = await res.json();
+  persistTokens(data);
+  return data.access_token as string;
 }
 
-/**
- * Sign in with email and password. Returns the JWT access token on success.
- * The access token (not the ID token) is the correct credential for API
- * authorization — the Go API validates token_use=access + client_id.
- */
-export function signIn(email: string, password: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const pool = getUserPool();
-    const user = new CognitoUser({ Username: email, Pool: pool });
-    const authDetails = new AuthenticationDetails({
-      Username: email,
-      Password: password,
-    });
-
-    user.authenticateUser(authDetails, {
-      onSuccess: (session: CognitoUserSession) => {
-        pendingUser = null;
-        resolve(session.getAccessToken().getJwtToken());
-      },
-      onFailure: (err: Error) => {
-        reject(err);
-      },
-      newPasswordRequired: (_userAttributes: object, _requiredAttributes: object) => {
-        pendingUser = user;
-        const err = new Error('New password required');
-        (err as any).code = 'NEW_PASSWORD_REQUIRED';
-        reject(err);
-      },
-    });
-  });
+function persistTokens(data: {
+  access_token: string;
+  id_token?: string;
+  refresh_token?: string;
+  expires_in: number;
+}): void {
+  store(STORAGE_KEYS.accessToken, data.access_token);
+  if (data.id_token) store(STORAGE_KEYS.idToken, data.id_token);
+  if (data.refresh_token) store(STORAGE_KEYS.refreshToken, data.refresh_token);
+  store(
+    STORAGE_KEYS.expiresAt,
+    String(Date.now() + data.expires_in * 1000)
+  );
 }
 
-/**
- * Complete the NEW_PASSWORD_REQUIRED challenge after admin-created sign-in.
- * Must be called after signIn rejects with code === 'NEW_PASSWORD_REQUIRED'.
- */
-export function completeNewPassword(newPassword: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (!pendingUser) {
-      reject(new Error('No pending password challenge'));
-      return;
+/** Refresh using the stored refresh token. Returns new access token or null. */
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = load(STORAGE_KEYS.refreshToken);
+  if (!refreshToken) return null;
+
+  try {
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: config.cognitoClientId,
+    });
+
+    const res = await fetch(`${hostedUiBase()}/oauth2/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+
+    if (!res.ok) {
+      clearTokens();
+      return null;
     }
-    pendingUser.completeNewPasswordChallenge(newPassword, {}, {
-      onSuccess: (session: CognitoUserSession) => {
-        pendingUser = null;
-        resolve(session.getAccessToken().getJwtToken());
-      },
-      onFailure: (err: Error) => {
-        reject(err);
-      },
-    });
-  });
-}
 
-/**
- * Sign out the current user and clear stored tokens.
- */
-export function signOut(): void {
-  const pool = getUserPool();
-  const user = pool.getCurrentUser();
-  if (user) {
-    user.signOut();
+    const data = await res.json();
+    persistTokens(data);
+    return data.access_token as string;
+  } catch {
+    return null;
   }
 }
 
 /**
- * Get the current access token, refreshing the session if needed.
- * Returns null if no valid session exists.
+ * Returns the current access token, refreshing proactively if it expires
+ * within 5 minutes. Returns null if no valid session exists.
  */
-export function getCurrentToken(): Promise<string | null> {
-  return new Promise((resolve) => {
-    const pool = getUserPool();
-    const user = pool.getCurrentUser();
-    if (!user) {
-      resolve(null);
-      return;
-    }
+export async function getCurrentToken(): Promise<string | null> {
+  const token = load(STORAGE_KEYS.accessToken);
+  const expiresAt = Number(load(STORAGE_KEYS.expiresAt) ?? '0');
 
-    user.getSession((err: Error | null, session: CognitoUserSession | null) => {
-      if (err || !session || !session.isValid()) {
-        resolve(null);
-        return;
-      }
+  if (!token) return null;
 
-      // Check if token is within 5 minutes of expiry — refresh proactively
-      const accessToken = session.getAccessToken();
-      const expiresAt = accessToken.getExpiration() * 1000; // ms
-      const fiveMinutes = 5 * 60 * 1000;
+  const fiveMinutes = 5 * 60 * 1000;
+  if (Date.now() > expiresAt - fiveMinutes) {
+    return refreshAccessToken();
+  }
 
-      if (Date.now() > expiresAt - fiveMinutes) {
-        const refreshToken = session.getRefreshToken();
-        user.refreshSession(refreshToken, (refreshErr: Error | null, newSession: CognitoUserSession | null) => {
-          if (refreshErr || !newSession) {
-            resolve(null);
-            return;
-          }
-          resolve(newSession.getAccessToken().getJwtToken());
-        });
-        return;
-      }
-
-      resolve(accessToken.getJwtToken());
-    });
-  });
+  return token;
 }
 
-/**
- * Check if there is a stored valid session.
- */
+/** Returns the current token if a valid session exists, null otherwise. */
 export function checkExistingSession(): Promise<string | null> {
   return getCurrentToken();
+}
+
+/** Sign out: clear local tokens and redirect to Cognito logout endpoint. */
+export function signOut(): void {
+  clearTokens();
+  const params = new URLSearchParams({
+    client_id: config.cognitoClientId,
+    logout_uri: callbackUrl(),
+  });
+  if (typeof window !== 'undefined') {
+    window.location.href = `${hostedUiBase()}/logout?${params}`;
+  }
 }
