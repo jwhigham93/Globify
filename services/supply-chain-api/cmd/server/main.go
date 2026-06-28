@@ -102,7 +102,8 @@ func main() {
 	}
 
 	// ── Router ───────────────────────────────────────────────────────
-	router := api.NewRouter(pool, verifier, gorillaHub, ddbHub)
+	simToken := os.Getenv("GPS_SIM_TOKEN")
+	router := api.NewRouter(pool, verifier, gorillaHub, ddbHub, simToken)
 
 	// ── Server ───────────────────────────────────────────────────────
 	port := os.Getenv("PORT")

@@ -142,6 +142,7 @@ func main() {
 		//     -c cognitoUserPoolId=us-east-1_xxx -c cognitoClientId=xxx
 		cognitoUserPoolID := ""
 		cognitoClientID := ""
+		gpsSimToken := os.Getenv("GPS_SIM_TOKEN")
 		if v, ok := app.Node().TryGetContext(jsii.String("cognitoUserPoolId")).(string); ok {
 			cognitoUserPoolID = v
 		}
@@ -156,6 +157,7 @@ func main() {
 			WebOrigin:         webOrigin,
 			CognitoUserPoolID: cognitoUserPoolID,
 			CognitoClientID:   cognitoClientID,
+			GpsSimToken:       gpsSimToken,
 		})
 	}
 

@@ -48,7 +48,7 @@ func parseAllowedOrigins() []string {
 // gorillaHub is the local-dev gorilla WebSocket hub (nil in production).
 // ddbHub is the DynamoDB-backed hub for Lambda/API Gateway (nil in local dev).
 // Pass exactly one non-nil hub; the other should be nil.
-func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, gorillaHub *wsHub.Hub, ddbHub *wshub.Hub) *chi.Mux {
+func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, gorillaHub *wsHub.Hub, ddbHub *wshub.Hub, simToken string) *chi.Mux {
 	r := chi.NewRouter()
 
 	// ── Global middleware ─────────────────────────────────────────────
@@ -144,7 +144,11 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, gorillaHub *wsHub.Hu
 	if ddbHub != nil {
 		authEnabled := verifier != nil
 		// Primary: LWA pass-through default for non-HTTP events.
-		r.Post("/events", HandleLambdaEvents(pool, ddbHub, authEnabled))
+		// Fix #5: apply the same per-IP rate limit as /_ws/connect so a public
+		// caller cannot flood /events (which is unfortunately reachable via the
+		// HTTP API catch-all route alongside the intended WebSocket/EventBridge path).
+		r.With(httprate.LimitByIP(60, time.Minute)).
+			Post("/events", HandleLambdaEvents(pool, ddbHub, authEnabled, simToken))
 		// Fallback: explicit LWA WebSocket path mappings (kept for future-proofing).
 		r.With(httprate.LimitByIP(60, time.Minute)).
 			Post("/_ws/connect", HandleWsConnect(pool, ddbHub, authEnabled))

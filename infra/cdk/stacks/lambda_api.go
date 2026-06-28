@@ -26,6 +26,10 @@ type LambdaApiStackProps struct {
 	// the Lambda will reject requests with a 401 when Cognito is not wired up.
 	CognitoUserPoolID string
 	CognitoClientID   string
+	// GpsSimToken is a shared secret that must appear in EventBridge event
+	// detail to authorise the GPS simulator. Prevents public HTTP callers from
+	// triggering simulation via the /events pass-through path.
+	GpsSimToken string
 }
 
 // LambdaApiStack deploys the Supply Chain API as an AWS Lambda function
@@ -184,6 +188,7 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 	// These use CDK tokens resolved at deploy time (not synth time).
 	fn.AddEnvironment(jsii.String("DYNAMODB_WS_TABLE"), wsTable.TableName(), nil)
 	fn.AddEnvironment(jsii.String("APIGW_WS_ENDPOINT"), wsStage.CallbackUrl(), nil)
+	fn.AddEnvironment(jsii.String("GPS_SIM_TOKEN"), jsii.String(props.GpsSimToken), nil)
 
 	// GPS simulator: EventBridge rule fires every 2 minutes, invoking the same
 	// Lambda with a simulator payload. LWA routes it to POST /events where
@@ -196,7 +201,7 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 		Event: awsevents.RuleTargetInput_FromObject(map[string]interface{}{
 			"source":      "supply-chain.simulator",
 			"detail-type": "SimulateGPS",
-			"detail":      map[string]interface{}{},
+			"detail":      map[string]interface{}{"token": props.GpsSimToken},
 		}),
 	}))
 

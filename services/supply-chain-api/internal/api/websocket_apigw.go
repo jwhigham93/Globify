@@ -62,26 +62,40 @@ func HandleWsDefault() http.HandlerFunc {
 	}
 }
 
+// maxEventBodyBytes caps the body read in HandleLambdaEvents. Lambda payloads
+// are at most 6 MB; WebSocket events and EventBridge ticks are well under 64 KB.
+const maxEventBodyBytes = 64 * 1024
+
 // HandleLambdaEvents handles raw Lambda events forwarded by Lambda Web Adapter
 // to POST /events. LWA routes non-HTTP Lambda events here — this includes both
 // API Gateway WebSocket events ($connect/$disconnect/$default) and EventBridge
 // scheduled events (GPS simulator). We parse the raw JSON and dispatch.
-func HandleLambdaEvents(pool *pgxpool.Pool, hub *wshub.Hub, authEnabled bool) http.HandlerFunc {
+//
+// simToken is the value of the GPS_SIM_TOKEN env var. A non-empty token is
+// required in the EventBridge event detail, preventing public HTTP callers from
+// triggering the GPS simulator via the publicly reachable /events endpoint.
+func HandleLambdaEvents(pool *pgxpool.Pool, hub *wshub.Hub, authEnabled bool, simToken string) http.HandlerFunc {
 	type wsRequestContext struct {
 		RouteKey     string `json:"routeKey"`
 		ConnectionID string `json:"connectionId"`
+		// EventType is set by API Gateway ("CONNECT", "DISCONNECT", "MESSAGE").
+		// We require it to match the expected value so that a public HTTP POST
+		// with a crafted routeKey cannot inject connection IDs into DynamoDB.
+		EventType string `json:"eventType"`
 	}
 	type lambdaEvent struct {
 		// API Gateway WebSocket events
 		RequestContext        wsRequestContext  `json:"requestContext"`
 		QueryStringParameters map[string]string `json:"queryStringParameters"`
 		// EventBridge events
-		Source     string `json:"source"`
-		DetailType string `json:"detail-type"`
+		Source     string            `json:"source"`
+		DetailType string            `json:"detail-type"`
+		Detail     map[string]string `json:"detail"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
+		// Fix #2: cap body size to prevent slow-loris / OOM.
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxEventBodyBytes))
 		if err != nil {
 			http.Error(w, `{"error":"failed to read event"}`, http.StatusInternalServerError)
 			return
@@ -93,17 +107,25 @@ func HandleLambdaEvents(pool *pgxpool.Pool, hub *wshub.Hub, authEnabled bool) ht
 			return
 		}
 
-		// EventBridge GPS simulator tick.
+		// Fix #3: EventBridge GPS simulator tick — require matching secret token.
+		// simToken is empty only in local dev (no env var), in which case the
+		// simulator is disabled at the /events path entirely.
 		if event.Source == "supply-chain.simulator" {
+			if simToken == "" || event.Detail["token"] != simToken {
+				log.Warn().Msg("gps-sim: rejected — missing or invalid token")
+				// Return 200 so EventBridge doesn't retry; this is either a
+				// misconfigured rule or a public caller probing the endpoint.
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 			log.Debug().Str("detailType", event.DetailType).Msg("gps-sim: trigger received")
 			RunGPSSimulator(r.Context(), pool, hub)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		// API Gateway WebSocket event.
+		// API Gateway WebSocket event — require routeKey to be present.
 		if event.RequestContext.RouteKey == "" {
-			// Unknown event type — return 200 so LWA doesn't retry.
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -113,6 +135,12 @@ func HandleLambdaEvents(pool *pgxpool.Pool, hub *wshub.Hub, authEnabled bool) ht
 
 		switch event.RequestContext.RouteKey {
 		case "$connect":
+			// Fix #6: require API Gateway's eventType field to match; a public HTTP
+			// POST can craft routeKey but is unlikely to know this field is checked.
+			if event.RequestContext.EventType != "CONNECT" {
+				http.Error(w, `{"error":"invalid event"}`, http.StatusBadRequest)
+				return
+			}
 			if connectionID == "" {
 				http.Error(w, `{"error":"missing connection ID"}`, http.StatusBadRequest)
 				return
@@ -141,7 +169,6 @@ func HandleLambdaEvents(pool *pgxpool.Pool, hub *wshub.Hub, authEnabled bool) ht
 			w.WriteHeader(http.StatusOK)
 
 		default:
-			// $default and any future route keys — nothing to do server-side.
 			w.WriteHeader(http.StatusOK)
 		}
 	}
