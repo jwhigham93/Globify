@@ -1,16 +1,13 @@
-/**
- * AuthProvider — React context for Cognito authentication state.
- * Provides { isAuthenticated, isLoading, token, user, signIn, signOut } to children.
- */
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import * as authService from '../services/authService';
+import { setTokenGetter } from '../services/apiClient';
 import { config } from '../services/config';
 
 interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   token: string | null;
-  signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => void;
   signOut: () => void;
 }
 
@@ -18,7 +15,7 @@ const AuthContext = createContext<AuthContextValue>({
   isAuthenticated: false,
   isLoading: true,
   token: null,
-  signIn: async () => { /* noop default */ },
+  signInWithGoogle: () => { /* noop default */ },
   signOut: () => { /* noop default */ },
 });
 
@@ -29,12 +26,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Schedule a token refresh 4 minutes before expiry
+  // Keep apiClient in sync so all API calls and WS ticket requests have the token
+  useEffect(() => {
+    setTokenGetter(() => token);
+  }, [token]);
+
   const scheduleRefresh = useCallback(() => {
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-    }
-    // Refresh every 50 minutes (tokens typically expire after 60 min)
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    // Refresh every 50 minutes (tokens expire after 60 min)
     refreshTimerRef.current = setTimeout(async () => {
       const newToken = await authService.getCurrentToken();
       if (newToken) {
@@ -46,14 +45,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, 50 * 60 * 1000);
   }, []);
 
-  // Check for existing session on mount
   useEffect(() => {
-    // Skip auth when Cognito is not configured (dev mode or local API testing)
     if (!config.isAuthEnabled) {
       setIsLoading(false);
       return;
     }
 
+    // Handle OAuth callback: Cognito redirects back with ?code=
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      if (code) {
+        // Remove the code from the URL before exchanging it
+        window.history.replaceState({}, document.title, window.location.pathname);
+        authService.handleOAuthCallback(code)
+          .then((newToken) => {
+            setToken(newToken);
+            scheduleRefresh();
+          })
+          .catch(() => { /* exchange failed — stay on sign-in screen */ })
+          .finally(() => setIsLoading(false));
+        return;
+      }
+    }
+
+    // Check for an existing stored session
     authService.checkExistingSession().then((existingToken) => {
       if (existingToken) {
         setToken(existingToken);
@@ -63,36 +79,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => {
-      if (refreshTimerRef.current) {
-        clearTimeout(refreshTimerRef.current);
-      }
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
   }, [scheduleRefresh]);
 
-  const handleSignIn = useCallback(
-    async (email: string, password: string) => {
-      const newToken = await authService.signIn(email, password);
-      setToken(newToken);
-      scheduleRefresh();
-    },
-    [scheduleRefresh]
-  );
-
   const handleSignOut = useCallback(() => {
-    authService.signOut();
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    authService.signOut(); // clears tokens + redirects to Cognito logout
     setToken(null);
-    if (refreshTimerRef.current) {
-      clearTimeout(refreshTimerRef.current);
-    }
   }, []);
 
-  const value: AuthContextValue = {
-    isAuthenticated: !config.isAuthEnabled || !!token,
-    isLoading,
-    token,
-    signIn: handleSignIn,
-    signOut: handleSignOut,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{
+      isAuthenticated: !config.isAuthEnabled || !!token,
+      isLoading,
+      token,
+      signInWithGoogle: authService.signInWithGoogle,
+      signOut: handleSignOut,
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };

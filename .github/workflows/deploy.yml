@@ -1,0 +1,211 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# id-token lets the jobs request a GitHub OIDC token to assume the AWS deploy
+# role (no static access keys). contents:read is for checkout.
+permissions:
+  contents: read
+  id-token: write
+
+# Serialize deploys per ref so two quick pushes can't race (e.g. S3 sync
+# overwriting a newer build, or Lambda update colliding with cdk deploy).
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Frontend ──────────────────────────────────────────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend (Globify Web)
+    runs-on: ubuntu-latest
+    environment: production
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      contains(toJson(github.event.commits.*.modified), 'apps/Globify') ||
+      contains(toJson(github.event.commits.*.added), 'apps/Globify')
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Export web bundle
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+          EXPO_PUBLIC_COGNITO_USER_POOL_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_USER_POOL_ID }}
+          EXPO_PUBLIC_COGNITO_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_CLIENT_ID }}
+          EXPO_PUBLIC_COGNITO_REGION: ${{ secrets.EXPO_PUBLIC_COGNITO_REGION }}
+          EXPO_PUBLIC_WS_URL: ${{ secrets.EXPO_PUBLIC_WS_URL }}
+          EXPO_PUBLIC_COGNITO_DOMAIN: ${{ secrets.EXPO_PUBLIC_COGNITO_DOMAIN }}
+        run: pnpm nx export Globify -- --platform web
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Sync to S3
+        env:
+          WEB_BUCKET_NAME: ${{ secrets.WEB_BUCKET_NAME }}
+        run: aws s3 sync apps/Globify/dist "s3://$WEB_BUCKET_NAME" --delete
+
+      - name: Invalidate CloudFront
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --paths '/*'
+
+  # ── Backend ───────────────────────────────────────────────────────────────
+  deploy-backend:
+    name: Deploy Backend (Lambda)
+    runs-on: ubuntu-latest
+    environment: production
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      contains(toJson(github.event.commits.*.modified), 'services/supply-chain-api') ||
+      contains(toJson(github.event.commits.*.added), 'services/supply-chain-api')
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: services/supply-chain-api/go.sum
+
+      - name: Build Lambda zip
+        working-directory: services/supply-chain-api
+        run: |
+          mkdir -p dist/pkg
+          cp -r migrations dist/pkg/
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -ldflags="-s -w" -o dist/pkg/bootstrap ./cmd/server
+          python3 -c "
+          import zipfile, os
+          with zipfile.ZipFile('dist/lambda.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
+              zf.write('dist/pkg/bootstrap', 'bootstrap')
+              for root, dirs, files in os.walk('dist/pkg/migrations'):
+                  for file in files:
+                      path = os.path.join(root, file)
+                      arc = path.replace('dist/pkg/', '', 1)
+                      zf.write(path, arc)
+          print('zip size:', os.path.getsize('dist/lambda.zip'), 'bytes')
+          "
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Update Lambda function code
+        run: |
+          aws lambda update-function-code \
+            --function-name supply-chain-api \
+            --zip-file fileb://services/supply-chain-api/dist/lambda.zip \
+            --region us-east-1
+
+      - name: Wait for update to complete
+        run: |
+          aws lambda wait function-updated \
+            --function-name supply-chain-api \
+            --region us-east-1
+
+  # ── Infra (CDK) ───────────────────────────────────────────────────────────
+  deploy-infra:
+    name: Deploy Infrastructure (CDK)
+    runs-on: ubuntu-latest
+    environment: production
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      contains(toJson(github.event.commits.*.modified), 'infra/cdk') ||
+      contains(toJson(github.event.commits.*.added), 'infra/cdk')
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: infra/cdk/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install CDK CLI
+        run: npm install -g aws-cdk@2.1129.0
+
+      - name: Build Lambda zip (CDK asset)
+        working-directory: services/supply-chain-api
+        run: |
+          mkdir -p dist/pkg
+          cp -r migrations dist/pkg/
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -ldflags="-s -w" -o dist/pkg/bootstrap ./cmd/server
+          python3 -c "
+          import zipfile, os
+          with zipfile.ZipFile('dist/lambda.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
+              zf.write('dist/pkg/bootstrap', 'bootstrap')
+              for root, dirs, files in os.walk('dist/pkg/migrations'):
+                  for file in files:
+                      path = os.path.join(root, file)
+                      arc = path.replace('dist/pkg/', '', 1)
+                      zf.write(path, arc)
+          "
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # The Google OAuth client secret lives in Secrets Manager, referenced by the
+      # auth stack as a dynamic reference (never plaintext in the CFN template).
+      # Upsert it from the GitHub secret before deploy so the reference resolves.
+      - name: Upsert Google OAuth secret to Secrets Manager
+        env:
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          SECRET_NAME="globify/google-oauth-client-secret"
+          if aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region us-east-1 >/dev/null 2>&1; then
+            aws secretsmanager put-secret-value --secret-id "$SECRET_NAME" \
+              --secret-string "$GOOGLE_CLIENT_SECRET" --region us-east-1
+          else
+            aws secretsmanager create-secret --name "$SECRET_NAME" \
+              --secret-string "$GOOGLE_CLIENT_SECRET" --region us-east-1
+          fi
+
+      - name: CDK deploy
+        env:
+          GPS_SIM_TOKEN: ${{ secrets.GPS_SIM_TOKEN }}
+          BUDGET_ALERT_EMAIL: ${{ secrets.BUDGET_ALERT_EMAIL }}
+          CDK_COGNITO_USER_POOL_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_USER_POOL_ID }}
+          CDK_COGNITO_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_CLIENT_ID }}
+        run: |
+          cdk deploy --all -c profile=ultra-lite --require-approval never \
+            -c cognitoUserPoolId="$CDK_COGNITO_USER_POOL_ID" \
+            -c cognitoClientId="$CDK_COGNITO_CLIENT_ID"

@@ -25,9 +25,10 @@ services:
     environment:
       DATABASE_URL: postgres://supplychain:supplychain_dev@postgres:5432/supplychain?sslmode=disable
       PORT: "8080"
-      ALLOWED_ORIGINS: "http://localhost:8081,http://localhost:19006"
+      ALLOWED_ORIGINS: "http://localhost:8081,http://localhost:8082,http://localhost:19006"
       LOG_FORMAT: json
-      # COGNITO_USER_POOL_ID and COGNITO_CLIENT_ID left empty for local dev (auth bypassed)
+      AUTH_DISABLED: "true"
+      # COGNITO_USER_POOL_ID and COGNITO_CLIENT_ID not needed when AUTH_DISABLED=true
     ports:
       - "8080:8080"
 

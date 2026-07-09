@@ -12,14 +12,19 @@ import (
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/disruption"
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/models"
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/risk"
-	wsHub "github.com/jwhig/jw-dev/services/supply-chain-api/internal/ws"
 )
+
+// WSBroadcaster is implemented by both the local gorilla Hub (dev) and the
+// DynamoDB-backed wshub.Hub (Lambda/API Gateway production).
+type WSBroadcaster interface {
+	Broadcast(msgType string, data interface{})
+}
 
 // Handlers holds dependencies for HTTP handler functions.
 type Handlers struct {
 	queries *db.Queries
 	pool    *pgxpool.Pool
-	hub     *wsHub.Hub
+	hub     WSBroadcaster
 }
 
 // NewHandlers creates a new Handlers with the given database connection.
