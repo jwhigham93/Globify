@@ -23,12 +23,22 @@ import { AuthProvider, useAuth } from './AuthProvider';
 import { SignInScreen } from './SignInScreen';
 import type { Location, SupplyRoute } from '../components/Globe/types';
 
+declare global {
+  interface Window { __hideLoadingShell?: () => void; }
+}
+
 /**
  * Inner app shell — uses auth context.
  * Loads data from API or falls back to local mock data in dev mode.
  */
 const AppContent = () => {
   const { isAuthenticated, isLoading: authLoading, token } = useAuth();
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.__hideLoadingShell) {
+      window.__hideLoadingShell();
+    }
+  }, []);
 
   const [data, setData] = useState<{ locations: Location[]; routes: SupplyRoute[] } | null>(null);
   const [loading, setLoading] = useState(true);

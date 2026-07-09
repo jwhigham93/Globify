@@ -2,9 +2,13 @@ package stacks
 
 import (
 	"github.com/aws/aws-cdk-go/awscdk/v2"
-	"github.com/aws/aws-cdk-go/awscdk/v2/awsecr"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsdynamodb"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsapigatewayv2integrations"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsevents"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awseventstargets"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsssm"
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
@@ -13,84 +17,101 @@ import (
 // LambdaApiStackProps contains cross-stack references for the Lambda stack.
 type LambdaApiStackProps struct {
 	awscdk.StackProps
-	EcrRepository awsecr.Repository
 	// WebOrigin is the allowed browser origin for CORS (the CloudFront URL of
 	// the web app). Used for both the app-level ALLOWED_ORIGINS env var and the
-	// Function URL CORS config. Never "*". If empty, falls back to localhost dev.
+	// HTTP API CORS config. Never "*". If empty, falls back to localhost dev.
 	WebOrigin *string
+	// Cognito values are passed as CDK context (-c flag) so they survive
+	// re-deploys without being hardcoded in source. Empty strings are safe —
+	// the Lambda will reject requests with a 401 when Cognito is not wired up.
+	CognitoUserPoolID string
+	CognitoClientID   string
+	// GpsSimToken is a shared secret that must appear in EventBridge event
+	// detail to authorise the GPS simulator. Prevents public HTTP callers from
+	// triggering simulation via the /events pass-through path.
+	GpsSimToken string
 }
 
 // LambdaApiStack deploys the Supply Chain API as an AWS Lambda function
-// backed by a container image from ECR. The image must include the
-// AWS Lambda Web Adapter (see Dockerfile.lambda) so the existing Go
-// HTTP server runs unmodified inside Lambda.
+// behind an API Gateway HTTP API. Uses zip asset + Lambda Web Adapter layer.
+// The existing Go HTTP server runs unmodified; LWA proxies invocations to HTTP.
 //
-// Uses a Lambda Function URL for a free, public HTTPS endpoint —
-// no API Gateway or ALB required.
-//
-// Database: the Neon PostgreSQL connection string is stored in SSM
-// Parameter Store (SecureString) and read by the Go server at cold start.
-// Store the connection string with:
-//
-//	aws ssm put-parameter --name /supply-chain/DATABASE_URL --value "postgres://..." --type SecureString
-//
-// Cost: ~$0/month within free tier (1M requests, 400K GB-seconds).
+// Cost: ~$1/million requests (HTTP API) + Lambda free tier + DynamoDB free tier.
 type LambdaApiStack struct {
 	awscdk.Stack
-	FunctionUrl awslambda.FunctionUrl
+	ApiUrl *string
+	WsUrl  *string
 }
 
 func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiStackProps) *LambdaApiStack {
+	// Fail fast: an empty GPS_SIM_TOKEN makes the simulator's token check
+	// (empty == empty) pass for any caller, leaving the /events endpoint able to
+	// trigger simulation publicly. Require a non-empty token at synth time.
+	if props.GpsSimToken == "" {
+		panic("LambdaApiStack: GpsSimToken is required — set the GPS_SIM_TOKEN GitHub secret / env var (e.g. `openssl rand -hex 32`)")
+	}
+
 	stack := awscdk.NewStack(scope, &id, &props.StackProps)
 
-	// ── Resolve allowed web origin (CORS) ───────────────────────
-	// Lock CORS to the web app's origin rather than "*". CORS only constrains
-	// browsers; native mobile apps and devices send no Origin header and are
-	// unaffected.
+	// ── Resolve allowed web origin (CORS) ───────────────────────────────
 	webOrigin := jsii.String("http://localhost:8081")
 	if props.WebOrigin != nil && *props.WebOrigin != "" {
 		webOrigin = props.WebOrigin
 	}
 
-	// ── SSM Parameter for DATABASE_URL (SecureString) ───────────
-	// The actual value is stored via CLI after deploy:
-	//   aws ssm put-parameter --name /supply-chain/DATABASE_URL --value "postgres://..." --type SecureString
+	// ── SSM Parameter for DATABASE_URL (SecureString) ────────────────────
 	ssmParamName := "/supply-chain/DATABASE_URL"
-
-	// Import reference so we can grant read access (parameter is created via CLI)
 	ssmParam := awsssm.StringParameter_FromSecureStringParameterAttributes(stack, jsii.String("DbUrlParam"), &awsssm.SecureStringParameterAttributes{
 		ParameterName: jsii.String(ssmParamName),
 	})
 
-	// ── Lambda function from ECR container image ─────────────────
-	// The ECR image tagged "lambda" must include the Lambda Web Adapter
-	// extension which translates Lambda invoke events into HTTP requests.
-	fn := awslambda.NewDockerImageFunction(stack, jsii.String("SupplyChainApiLambda"), &awslambda.DockerImageFunctionProps{
+	// ── DynamoDB table for WebSocket connection IDs ──────────────────────
+	// Pay-per-request billing; TTL auto-expires stale connections.
+	// Sits entirely within the DynamoDB always-free tier for portfolio scale.
+	wsTable := awsdynamodb.NewTable(stack, jsii.String("WsConnections"), &awsdynamodb.TableProps{
+		TableName: jsii.String("ws-connections"),
+		PartitionKey: &awsdynamodb.Attribute{
+			Name: jsii.String("connectionId"),
+			Type: awsdynamodb.AttributeType_STRING,
+		},
+		TimeToLiveAttribute: jsii.String("expiresAt"),
+		BillingMode:         awsdynamodb.BillingMode_PAY_PER_REQUEST,
+		RemovalPolicy:       awscdk.RemovalPolicy_DESTROY,
+	})
+
+	// ── AWS Lambda Web Adapter layer (v1.0.1, x86_64) ───────────────────
+	lwaLayer := awslambda.LayerVersion_FromLayerVersionArn(
+		stack,
+		jsii.String("LwaLayer"),
+		jsii.String("arn:aws:lambda:us-east-1:753240598075:layer:LambdaAdapterLayerX86:28"),
+	)
+
+	// ── Lambda function from zip asset ───────────────────────────────────
+	fn := awslambda.NewFunction(stack, jsii.String("SupplyChainApiLambda"), &awslambda.FunctionProps{
 		FunctionName: jsii.String("supply-chain-api"),
-		Code: awslambda.DockerImageCode_FromEcr(props.EcrRepository, &awslambda.EcrImageCodeProps{
-			TagOrDigest: jsii.String("lambda"),
-		}),
+		Runtime:      awslambda.Runtime_PROVIDED_AL2023(),
+		Architecture: awslambda.Architecture_X86_64(),
+		Handler:      jsii.String("bootstrap"),
+		Code:         awslambda.Code_FromAsset(jsii.String("../../services/supply-chain-api/dist/lambda.zip"), nil),
+		Layers:       &[]awslambda.ILayerVersion{lwaLayer},
 		MemorySize:   jsii.Number(256),
 		Timeout:      awscdk.Duration_Seconds(jsii.Number(30)),
-		Architecture: awslambda.Architecture_ARM_64(),
-		// Hard cost ceiling against runaway invocations on the public Function URL
-		// (ultra-lite has no WAF; rate limiting is enforced in-process by the app).
-		ReservedConcurrentExecutions: jsii.Number(20),
 		Environment: &map[string]*string{
 			"AWS_LWA_PORT":         jsii.String("8080"),
 			"PORT":                 jsii.String("8080"),
 			"LOG_FORMAT":           jsii.String("json"),
-			"COGNITO_USER_POOL_ID": jsii.String(""), // set after deploy
-			"COGNITO_CLIENT_ID":    jsii.String(""), // set after deploy
+			"COGNITO_USER_POOL_ID": jsii.String(props.CognitoUserPoolID),
+			"COGNITO_CLIENT_ID":    jsii.String(props.CognitoClientID),
 			"COGNITO_REGION":       jsii.String("us-east-1"),
 			"ALLOWED_ORIGINS":      webOrigin,
-			"SSM_DATABASE_URL":     jsii.String(ssmParamName), // param name, not the secret
+			"SSM_DATABASE_URL":     jsii.String(ssmParamName),
+			// DYNAMODB_WS_TABLE and APIGW_WS_ENDPOINT are set below after the
+			// WebSocket API is created, since they depend on CDK token values.
 		},
 	})
 
-	// ── Grant Lambda permission to read the SSM SecureString ─────
+	// ── Grant Lambda permission to read the SSM SecureString ─────────────
 	ssmParam.GrantRead(fn)
-	// Also grant kms:Decrypt for the default SSM key (aws/ssm)
 	fn.AddToRolePolicy(awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
 		Actions:   &[]*string{jsii.String("kms:Decrypt")},
 		Resources: &[]*string{jsii.String("*")},
@@ -101,16 +122,22 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 		},
 	}))
 
-	// ── Function URL — public HTTPS endpoint, no API Gateway needed ─
-	fnUrl := fn.AddFunctionUrl(&awslambda.FunctionUrlOptions{
-		AuthType: awslambda.FunctionUrlAuthType_NONE,
-		Cors: &awslambda.FunctionUrlCorsOptions{
-			AllowedOrigins: &[]*string{webOrigin},
-			AllowedMethods: &[]awslambda.HttpMethod{
-				awslambda.HttpMethod_GET,
-				awslambda.HttpMethod_POST,
+	// Grant Lambda DynamoDB read/write for WebSocket connection storage
+	wsTable.GrantReadWriteData(fn)
+
+	// ── API Gateway HTTP API (REST endpoints) ────────────────────────────
+	// HTTP API is simpler and cheaper than REST API ($1/million vs $3.50/million).
+	// CORS is configured here; the Go app also validates origins in-process.
+	httpApi := awsapigatewayv2.NewHttpApi(stack, jsii.String("SupplyChainHttpApi"), &awsapigatewayv2.HttpApiProps{
+		ApiName: jsii.String("supply-chain-api"),
+		CorsPreflight: &awsapigatewayv2.CorsPreflightOptions{
+			AllowOrigins: &[]*string{webOrigin, jsii.String("http://localhost:8081"), jsii.String("http://localhost:8082")},
+			AllowMethods: &[]awsapigatewayv2.CorsHttpMethod{
+				awsapigatewayv2.CorsHttpMethod_GET,
+				awsapigatewayv2.CorsHttpMethod_POST,
+				awsapigatewayv2.CorsHttpMethod_OPTIONS,
 			},
-			AllowedHeaders: &[]*string{
+			AllowHeaders: &[]*string{
 				jsii.String("Authorization"),
 				jsii.String("Content-Type"),
 				jsii.String("X-Device-API-Key"),
@@ -119,25 +146,87 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 		},
 	})
 
-	// ── Stack outputs ────────────────────────────────────────────
-	awscdk.NewCfnOutput(stack, jsii.String("LambdaFunctionUrl"), &awscdk.CfnOutputProps{
-		Value:       fnUrl.Url(),
-		Description: jsii.String("Lambda Function URL (HTTPS)"),
-		ExportName:  jsii.String("SupplyChain-LambdaUrl"),
+	// Proxy ALL routes to the Lambda (the Go router handles routing internally)
+	httpIntegration := awsapigatewayv2integrations.NewHttpLambdaIntegration(
+		jsii.String("LambdaIntegration"),
+		fn,
+		nil,
+	)
+	httpApi.AddRoutes(&awsapigatewayv2.AddRoutesOptions{
+		Path:        jsii.String("/{proxy+}"),
+		Methods:     &[]awsapigatewayv2.HttpMethod{awsapigatewayv2.HttpMethod_ANY},
+		Integration: httpIntegration,
+	})
+
+	// ── API Gateway WebSocket API (GPS streaming) ────────────────────────
+	// All three routes ($connect, $disconnect, $default) invoke the same Lambda.
+	// LWA maps them to POST /_ws/connect, /_ws/disconnect, /_ws/default.
+	wsIntegration := awsapigatewayv2integrations.NewWebSocketLambdaIntegration(
+		jsii.String("WsLambdaIntegration"),
+		fn,
+		nil,
+	)
+	wsApi := awsapigatewayv2.NewWebSocketApi(stack, jsii.String("SupplyChainWsApi"), &awsapigatewayv2.WebSocketApiProps{
+		ApiName: jsii.String("supply-chain-ws"),
+		ConnectRouteOptions: &awsapigatewayv2.WebSocketRouteOptions{
+			Integration: wsIntegration,
+		},
+		DisconnectRouteOptions: &awsapigatewayv2.WebSocketRouteOptions{
+			Integration: wsIntegration,
+		},
+		DefaultRouteOptions: &awsapigatewayv2.WebSocketRouteOptions{
+			Integration: wsIntegration,
+		},
+	})
+
+	wsStage := awsapigatewayv2.NewWebSocketStage(stack, jsii.String("WsApiProdStage"), &awsapigatewayv2.WebSocketStageProps{
+		WebSocketApi: wsApi,
+		StageName:    jsii.String("production"),
+		AutoDeploy:   jsii.Bool(true),
+	})
+
+	// Grant Lambda permission to post messages back to connected WebSocket clients
+	fn.AddToRolePolicy(awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
+		Actions:   &[]*string{jsii.String("execute-api:ManageConnections")},
+		Resources: &[]*string{jsii.String("arn:aws:execute-api:*:*:*/@connections/*")},
+	}))
+
+	// Wire DynamoDB table name and WebSocket callback URL into Lambda env vars.
+	// These use CDK tokens resolved at deploy time (not synth time).
+	fn.AddEnvironment(jsii.String("DYNAMODB_WS_TABLE"), wsTable.TableName(), nil)
+	fn.AddEnvironment(jsii.String("APIGW_WS_ENDPOINT"), wsStage.CallbackUrl(), nil)
+	fn.AddEnvironment(jsii.String("GPS_SIM_TOKEN"), jsii.String(props.GpsSimToken), nil)
+
+	// GPS simulator: EventBridge rule fires every 2 minutes, invoking the same
+	// Lambda with a simulator payload. LWA routes it to POST /events where
+	// RunGPSSimulator updates truck positions and broadcasts via WebSocket.
+	simulatorRule := awsevents.NewRule(stack, jsii.String("GPSSimulatorRule"), &awsevents.RuleProps{
+		Schedule:    awsevents.Schedule_Rate(awscdk.Duration_Minutes(jsii.Number(2))),
+		Description: jsii.String("Simulates GPS movement for active vehicles every 2 minutes"),
+	})
+	simulatorRule.AddTarget(awseventstargets.NewLambdaFunction(fn, &awseventstargets.LambdaFunctionProps{
+		Event: awsevents.RuleTargetInput_FromObject(map[string]interface{}{
+			"source":      "supply-chain.simulator",
+			"detail-type": "SimulateGPS",
+			"detail":      map[string]interface{}{"token": props.GpsSimToken},
+		}),
+	}))
+
+	// ── Stack outputs ─────────────────────────────────────────────────────
+	awscdk.NewCfnOutput(stack, jsii.String("ApiGatewayUrl"), &awscdk.CfnOutputProps{
+		Value:       httpApi.ApiEndpoint(),
+		Description: jsii.String("API Gateway HTTP API endpoint"),
+		ExportName:  jsii.String("SupplyChain-ApiUrl"),
+	})
+
+	awscdk.NewCfnOutput(stack, jsii.String("WebSocketUrl"), &awscdk.CfnOutputProps{
+		Value:       wsStage.Url(),
+		Description: jsii.String("API Gateway WebSocket URL (set as EXPO_PUBLIC_WS_URL GitHub secret)"),
 	})
 
 	awscdk.NewCfnOutput(stack, jsii.String("LambdaFunctionName"), &awscdk.CfnOutputProps{
 		Value:       fn.FunctionName(),
 		Description: jsii.String("Lambda function name"),
-	})
-
-	awscdk.NewCfnOutput(stack, jsii.String("StoreDbUrlCommand"), &awscdk.CfnOutputProps{
-		Value: jsii.String(
-			"aws ssm put-parameter --name /supply-chain/DATABASE_URL " +
-				"--value 'postgres://user:pass@ep-xxx.us-east-2.aws.neon.tech/supplychain?sslmode=require' " +
-				"--type SecureString --overwrite",
-		),
-		Description: jsii.String("Command template to store DATABASE_URL in SSM (fill in real values)"),
 	})
 
 	awscdk.NewCfnOutput(stack, jsii.String("SetCognitoCommand"), &awscdk.CfnOutputProps{
@@ -151,7 +240,8 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 	})
 
 	return &LambdaApiStack{
-		Stack:       stack,
-		FunctionUrl: fnUrl,
+		Stack:  stack,
+		ApiUrl: httpApi.ApiEndpoint(),
+		WsUrl:  wsStage.Url(),
 	}
 }

@@ -148,3 +148,14 @@ opencode.json
 
 # logs
 error.log
+
+# Python virtualenvs
+myenv/
+venv/
+.venv/
+
+# RTK token savings cache
+.tokensave/
+
+# Claude Code local config
+.claude/

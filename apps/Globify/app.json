@@ -20,7 +20,8 @@
     },
     "web": {
       "bundler": "metro",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "backgroundColor": "#000000"
     },
     "plugins": [
       [
@@ -29,14 +30,15 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#000000"
         }
       ]
     ],
     "extra": {
       "API_BASE_URL": "",
-      "COGNITO_USER_POOL_ID": "",
-      "COGNITO_CLIENT_ID": "",
+      "COGNITO_USER_POOL_ID": "us-east-1_FzLm2rd4F",
+      "COGNITO_CLIENT_ID": "8oqh7olvq83qc6miu6osnmfs6",
+      "COGNITO_DOMAIN": "https://globify-auth.auth.us-east-1.amazoncognito.com",
       "COGNITO_REGION": "us-east-1"
     }
   }

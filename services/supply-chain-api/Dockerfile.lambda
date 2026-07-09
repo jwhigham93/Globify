@@ -20,16 +20,20 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o /server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /server ./cmd/server
 
-# ── Lambda Web Adapter ───────────────────────────────────────
-FROM public.ecr.aws/awsguru/aws-lambda-web-adapter:0.8.4 AS adapter
+# ── Lambda Web Adapter (downloaded from GitHub releases) ─────
+FROM alpine:3.21 AS lwa-downloader
+RUN apk add --no-cache curl && \
+    curl -fsSL -o /lambda-adapter \
+      https://github.com/awslabs/aws-lambda-web-adapter/releases/download/v0.8.4/aws-lambda-adapter_linux_amd64 && \
+    chmod +x /lambda-adapter
 
 # ── Runtime stage (Lambda base image) ────────────────────────
-FROM public.ecr.aws/lambda/provided:al2023-arm64
+FROM public.ecr.aws/lambda/provided:al2023-x86_64
 
 # Install the Lambda Web Adapter extension
-COPY --from=adapter /lambda-adapter /opt/extensions/lambda-adapter
+COPY --from=lwa-downloader /lambda-adapter /opt/extensions/lambda-adapter
 
 # Copy the API binary and migrations
 COPY --from=builder /server ${LAMBDA_TASK_ROOT}/server

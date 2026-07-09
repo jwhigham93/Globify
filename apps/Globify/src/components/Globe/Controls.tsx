@@ -61,7 +61,6 @@ export const Controls: React.FC<ControlsProps> = ({ onZoomChange, zoomTarget, on
       if (dist !== lastDistance.current) {
         lastDistance.current = dist;
         onZoomChange?.(dist);
-        console.log(`[zoom] camera distance: ${dist}`);
       }
 
       // Adaptive zoom speed — slow down as we approach the surface
