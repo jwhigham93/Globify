@@ -48,13 +48,16 @@ func NewGithubOidcStack(scope constructs.Construct, id string, props *GithubOidc
 		ClientIds: &[]*string{jsii.String("sts.amazonaws.com")},
 	})
 
-	// Trust policy: only tokens from this repo, with the expected audience.
+	// Trust policy: exact-match the audience and the subject. All three deploy
+	// jobs run in the `production` GitHub environment, so their OIDC token sub is
+	// "repo:<repo>:environment:production" — pin to that rather than a bare ":*",
+	// which would let a workflow on any branch/PR assume this write-capable role.
+	// (If a deploy job stops using `environment: production`, its sub reverts to
+	// the ref form and this trust policy must be updated to match.)
 	principal := awsiam.NewOpenIdConnectPrincipal(provider, &map[string]interface{}{
 		"StringEquals": map[string]interface{}{
 			"token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-		},
-		"StringLike": map[string]interface{}{
-			"token.actions.githubusercontent.com:sub": "repo:" + props.GithubRepo + ":*",
+			"token.actions.githubusercontent.com:sub": "repo:" + props.GithubRepo + ":environment:production",
 		},
 	})
 
