@@ -12,8 +12,11 @@ type AuthStackProps struct {
 	awscdk.StackProps
 	// GoogleClientId is the OAuth 2.0 client ID from Google Cloud Console.
 	GoogleClientId string
-	// GoogleClientSecret is the OAuth 2.0 client secret (passed via CDK context or env var).
-	GoogleClientSecret string
+	// GoogleClientSecretName is the name of the AWS Secrets Manager secret holding
+	// the OAuth 2.0 client secret. The value is referenced via a CloudFormation
+	// dynamic reference so it never appears in plaintext in the synthesized
+	// template. The CI deploy job upserts this secret before running cdk deploy.
+	GoogleClientSecretName string
 	// WebOrigin is the CloudFront URL used as the OAuth callback + logout URL.
 	WebOrigin string
 }
@@ -79,7 +82,7 @@ func NewAuthStack(scope constructs.Construct, id string, props *AuthStackProps) 
 	googleIDP := awscognito.NewUserPoolIdentityProviderGoogle(stack, jsii.String("GoogleIDP"), &awscognito.UserPoolIdentityProviderGoogleProps{
 		UserPool:          userPool,
 		ClientId:          jsii.String(props.GoogleClientId),
-		ClientSecretValue: awscdk.SecretValue_UnsafePlainText(jsii.String(props.GoogleClientSecret)),
+		ClientSecretValue: awscdk.SecretValue_SecretsManager(jsii.String(props.GoogleClientSecretName), nil),
 		Scopes:            &[]*string{jsii.String("openid"), jsii.String("email"), jsii.String("profile")},
 		AttributeMapping: &awscognito.AttributeMapping{
 			Email:          awscognito.ProviderAttribute_GOOGLE_EMAIL(),

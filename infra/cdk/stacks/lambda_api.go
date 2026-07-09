@@ -44,6 +44,13 @@ type LambdaApiStack struct {
 }
 
 func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiStackProps) *LambdaApiStack {
+	// Fail fast: an empty GPS_SIM_TOKEN makes the simulator's token check
+	// (empty == empty) pass for any caller, leaving the /events endpoint able to
+	// trigger simulation publicly. Require a non-empty token at synth time.
+	if props.GpsSimToken == "" {
+		panic("LambdaApiStack: GpsSimToken is required — set the GPS_SIM_TOKEN GitHub secret / env var (e.g. `openssl rand -hex 32`)")
+	}
+
 	stack := awscdk.NewStack(scope, &id, &props.StackProps)
 
 	// ── Resolve allowed web origin (CORS) ───────────────────────────────

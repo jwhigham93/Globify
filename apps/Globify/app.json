@@ -38,6 +38,7 @@
       "API_BASE_URL": "",
       "COGNITO_USER_POOL_ID": "us-east-1_FzLm2rd4F",
       "COGNITO_CLIENT_ID": "8oqh7olvq83qc6miu6osnmfs6",
+      "COGNITO_DOMAIN": "https://globify-auth.auth.us-east-1.amazoncognito.com",
       "COGNITO_REGION": "us-east-1"
     }
   }

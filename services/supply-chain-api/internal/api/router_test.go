@@ -7,7 +7,7 @@ import (
 )
 
 func TestRouter_HealthzIsPublic(t *testing.T) {
-	r := NewRouter(nil, testVerifier(t), nil)
+	r := NewRouter(nil, testVerifier(t), nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
@@ -22,7 +22,7 @@ func TestRouter_ReadyzIsPublic(t *testing.T) {
 	// /readyz must be reachable without a token so the K8s readiness probe
 	// works. (With a nil pool the handler errors via Recoverer; the point is it
 	// is never gated by auth, i.e. never 401.)
-	r := NewRouter(nil, testVerifier(t), nil)
+	r := NewRouter(nil, testVerifier(t), nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	rec := httptest.NewRecorder()
@@ -34,7 +34,7 @@ func TestRouter_ReadyzIsPublic(t *testing.T) {
 }
 
 func TestRouter_ApiV1RequiresAuth(t *testing.T) {
-	r := NewRouter(nil, testVerifier(t), nil)
+	r := NewRouter(nil, testVerifier(t), nil, nil, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/locations", nil)
 	rec := httptest.NewRecorder()

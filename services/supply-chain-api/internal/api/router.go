@@ -147,13 +147,18 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, gorillaHub *wsHub.Hu
 		// Fix #5: apply the same per-IP rate limit as /_ws/connect so a public
 		// caller cannot flood /events (which is unfortunately reachable via the
 		// HTTP API catch-all route alongside the intended WebSocket/EventBridge path).
-		r.With(httprate.LimitByIP(60, time.Minute)).
+		wsEventLimit := httprate.LimitByIP(60, time.Minute)
+		r.With(wsEventLimit).
 			Post("/events", HandleLambdaEvents(pool, ddbHub, authEnabled, simToken))
 		// Fallback: explicit LWA WebSocket path mappings (kept for future-proofing).
-		r.With(httprate.LimitByIP(60, time.Minute)).
+		// Every public fallback route carries the same limiter — /_ws/disconnect
+		// triggers a DynamoDB delete per request, so it must not be left uncapped.
+		r.With(wsEventLimit).
 			Post("/_ws/connect", HandleWsConnect(pool, ddbHub, authEnabled))
-		r.Post("/_ws/disconnect", HandleWsDisconnect(ddbHub))
-		r.Post("/_ws/default", HandleWsDefault())
+		r.With(wsEventLimit).
+			Post("/_ws/disconnect", HandleWsDisconnect(ddbHub))
+		r.With(wsEventLimit).
+			Post("/_ws/default", HandleWsDefault())
 	}
 
 	return r

@@ -31,9 +31,13 @@ export const config = {
     return !this.apiBaseUrl;
   },
 
-  /** Whether Cognito auth is enabled (requires both pool ID and client ID) */
+  /**
+   * Whether Cognito auth is enabled. Requires the Hosted UI domain in addition
+   * to the pool/client IDs: signInWithGoogle() builds the OAuth redirect from
+   * cognitoDomain, so an empty domain would produce a broken relative URL.
+   */
   get isAuthEnabled(): boolean {
-    return !!this.cognitoUserPoolId && !!this.cognitoClientId;
+    return !!this.cognitoUserPoolId && !!this.cognitoClientId && !!this.cognitoDomain;
   },
 
   /** Resolved WebSocket URL — derives ws(s):// from apiBaseUrl if wsUrl not set. Returns empty string (disabled) when EXPO_PUBLIC_WS_URL is explicitly empty. */

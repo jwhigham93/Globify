@@ -75,7 +75,7 @@ func RunGPSSimulator(ctx context.Context, pool *pgxpool.Pool, hub WSBroadcaster)
 		// Spread pings by 1 ms to avoid collisions on the UNIQUE constraint.
 		recordedAt := now.Add(time.Duration(i) * time.Millisecond)
 
-		_, err := pool.Exec(ctx,
+		tag, err := pool.Exec(ctx,
 			`INSERT INTO gps_pings (vehicle_id, lat, lng, heading, speed_mph, recorded_at)
 			 VALUES ($1, $2, $3, $4, $5, $6)
 			 ON CONFLICT (vehicle_id, recorded_at) DO NOTHING`,
@@ -83,6 +83,11 @@ func RunGPSSimulator(ctx context.Context, pool *pgxpool.Pool, hub WSBroadcaster)
 		)
 		if err != nil {
 			log.Warn().Err(err).Str("vehicleId", v.id).Msg("gps-sim: insert failed")
+			continue
+		}
+		// ON CONFLICT DO NOTHING can insert zero rows; only count and broadcast a
+		// position that was actually persisted so clients don't see phantom moves.
+		if tag.RowsAffected() == 0 {
 			continue
 		}
 		updated++

@@ -43,8 +43,18 @@ func HandleWsConnect(pool *pgxpool.Pool, hub *wshub.Hub, authEnabled bool) http.
 
 // HandleWsDisconnect processes $disconnect events (POST /_ws/disconnect).
 // Always returns 200 — the connection is best-effort removed from DynamoDB.
+//
+// This fallback route (like /_ws/connect) is publicly reachable via the HTTP
+// API catch-all, so it must not delete a connection record on a caller-supplied
+// ID alone. We require the API Gateway-set x-event-type header to match, mirroring
+// the x-connection-id header mapping this path already assumes. The robust fix is
+// to route these paths only from API Gateway at the infra layer (tracked backlog).
 func HandleWsDisconnect(hub *wshub.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("x-event-type") != "DISCONNECT" {
+			http.Error(w, `{"error":"invalid event"}`, http.StatusBadRequest)
+			return
+		}
 		if connectionID := r.Header.Get("x-connection-id"); connectionID != "" {
 			if err := hub.Disconnect(r.Context(), connectionID); err != nil {
 				log.Debug().Err(err).Str("connectionId", connectionID).Msg("ws: disconnect cleanup failed")
@@ -161,6 +171,13 @@ func HandleLambdaEvents(pool *pgxpool.Pool, hub *wshub.Hub, authEnabled bool, si
 			w.WriteHeader(http.StatusOK)
 
 		case "$disconnect":
+			// Require the eventType field to match, same as $connect (Fix #6): a
+			// public HTTP POST can craft routeKey but not the API Gateway-set
+			// eventType, so a crafted request cannot drop a known connection.
+			if event.RequestContext.EventType != "DISCONNECT" {
+				http.Error(w, `{"error":"invalid event"}`, http.StatusBadRequest)
+				return
+			}
 			if connectionID != "" {
 				if err := hub.Disconnect(r.Context(), connectionID); err != nil {
 					log.Debug().Err(err).Str("connectionId", connectionID).Msg("ws: disconnect cleanup failed")

@@ -5,8 +5,17 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# id-token lets the jobs request a GitHub OIDC token to assume the AWS deploy
+# role (no static access keys). contents:read is for checkout.
 permissions:
   contents: read
+  id-token: write
+
+# Serialize deploys per ref so two quick pushes can't race (e.g. S3 sync
+# overwriting a newer build, or Lambda update colliding with cdk deploy).
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   # ── Frontend ──────────────────────────────────────────────────────────────
@@ -21,6 +30,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: pnpm/action-setup@v4
         with:
@@ -47,8 +58,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Sync to S3
@@ -76,6 +86,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-go@v5
         with:
@@ -104,8 +116,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Update Lambda function code
@@ -133,6 +144,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-go@v5
         with:
@@ -144,7 +157,7 @@ jobs:
           node-version: 20
 
       - name: Install CDK CLI
-        run: npm install -g aws-cdk
+        run: npm install -g aws-cdk@2.1129.0
 
       - name: Build Lambda zip (CDK asset)
         working-directory: services/supply-chain-api
@@ -167,14 +180,29 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
+
+      # The Google OAuth client secret lives in Secrets Manager, referenced by the
+      # auth stack as a dynamic reference (never plaintext in the CFN template).
+      # Upsert it from the GitHub secret before deploy so the reference resolves.
+      - name: Upsert Google OAuth secret to Secrets Manager
+        env:
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          SECRET_NAME="globify/google-oauth-client-secret"
+          if aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region us-east-1 >/dev/null 2>&1; then
+            aws secretsmanager put-secret-value --secret-id "$SECRET_NAME" \
+              --secret-string "$GOOGLE_CLIENT_SECRET" --region us-east-1
+          else
+            aws secretsmanager create-secret --name "$SECRET_NAME" \
+              --secret-string "$GOOGLE_CLIENT_SECRET" --region us-east-1
+          fi
 
       - name: CDK deploy
         env:
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GPS_SIM_TOKEN: ${{ secrets.GPS_SIM_TOKEN }}
+          BUDGET_ALERT_EMAIL: ${{ secrets.BUDGET_ALERT_EMAIL }}
           CDK_COGNITO_USER_POOL_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_USER_POOL_ID }}
           CDK_COGNITO_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_CLIENT_ID }}
         run: |

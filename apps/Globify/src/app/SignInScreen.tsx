@@ -16,6 +16,8 @@ export const SignInScreen: React.FC = () => {
           onPress={signInWithGoogle}
           activeOpacity={0.85}
           testID="sign-in-google"
+          accessibilityRole="button"
+          accessibilityLabel="Sign in with Google"
         >
           <Image
             source={{ uri: 'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg' }}

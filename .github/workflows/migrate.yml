@@ -17,6 +17,12 @@ on:
 permissions:
   contents: read
 
+# Never let two migration runs overlap — a concurrent up/down could corrupt the
+# schema_migrations dirty state.
+concurrency:
+  group: db-migrate
+  cancel-in-progress: false
+
 jobs:
   migrate:
     name: Run migrations (${{ inputs.direction }})
@@ -25,6 +31,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install golang-migrate
         run: |
