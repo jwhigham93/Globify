@@ -34,12 +34,22 @@ func NewAuthStack(scope constructs.Construct, id string, props *awscdk.StackProp
 			},
 		},
 		PasswordPolicy: &awscognito.PasswordPolicy{
-			MinLength:        jsii.Number(8),
+			MinLength:        jsii.Number(12),
 			RequireLowercase: jsii.Bool(true),
 			RequireUppercase: jsii.Bool(true),
 			RequireDigits:    jsii.Bool(true),
-			RequireSymbols:   jsii.Bool(false),
+			RequireSymbols:   jsii.Bool(true),
 		},
+		// Optional TOTP (authenticator app) MFA — no SMS, so no per-message cost.
+		// Users may enrol a second factor; not forced, to keep demo sign-in simple.
+		Mfa: awscognito.Mfa_OPTIONAL,
+		MfaSecondFactor: &awscognito.MfaSecondFactor{
+			Otp: jsii.Bool(true),
+			Sms: jsii.Bool(false),
+		},
+		// Note: Cognito advanced security / threat protection (compromised-credential
+		// detection, adaptive auth) adds ~$0.05/MAU and is intentionally left off to
+		// preserve the ultra-lite cost target. Enable via FeaturePlan if needed.
 		AccountRecovery: awscognito.AccountRecovery_EMAIL_ONLY,
 		RemovalPolicy:   awscdk.RemovalPolicy_DESTROY, // dev — change for prod
 	})

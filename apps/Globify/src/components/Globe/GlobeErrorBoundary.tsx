@@ -11,13 +11,13 @@ interface State {
 }
 
 export class GlobeErrorBoundary extends React.Component<Props, State> {
-  state: State = { error: null };
+  override state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
+  override componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[GlobeErrorBoundary]', error, info.componentStack);
   }
 
@@ -26,7 +26,7 @@ export class GlobeErrorBoundary extends React.Component<Props, State> {
     this.props.onRetry?.();
   };
 
-  render() {
+  override render() {
     if (this.state.error) {
       return (
         <View style={styles.container}>

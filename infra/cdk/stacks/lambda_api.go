@@ -14,6 +14,10 @@ import (
 type LambdaApiStackProps struct {
 	awscdk.StackProps
 	EcrRepository awsecr.Repository
+	// WebOrigin is the allowed browser origin for CORS (the CloudFront URL of
+	// the web app). Used for both the app-level ALLOWED_ORIGINS env var and the
+	// Function URL CORS config. Never "*". If empty, falls back to localhost dev.
+	WebOrigin *string
 }
 
 // LambdaApiStack deploys the Supply Chain API as an AWS Lambda function
@@ -39,6 +43,15 @@ type LambdaApiStack struct {
 func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiStackProps) *LambdaApiStack {
 	stack := awscdk.NewStack(scope, &id, &props.StackProps)
 
+	// ── Resolve allowed web origin (CORS) ───────────────────────
+	// Lock CORS to the web app's origin rather than "*". CORS only constrains
+	// browsers; native mobile apps and devices send no Origin header and are
+	// unaffected.
+	webOrigin := jsii.String("http://localhost:8081")
+	if props.WebOrigin != nil && *props.WebOrigin != "" {
+		webOrigin = props.WebOrigin
+	}
+
 	// ── SSM Parameter for DATABASE_URL (SecureString) ───────────
 	// The actual value is stored via CLI after deploy:
 	//   aws ssm put-parameter --name /supply-chain/DATABASE_URL --value "postgres://..." --type SecureString
@@ -60,6 +73,9 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 		MemorySize:   jsii.Number(256),
 		Timeout:      awscdk.Duration_Seconds(jsii.Number(30)),
 		Architecture: awslambda.Architecture_ARM_64(),
+		// Hard cost ceiling against runaway invocations on the public Function URL
+		// (ultra-lite has no WAF; rate limiting is enforced in-process by the app).
+		ReservedConcurrentExecutions: jsii.Number(20),
 		Environment: &map[string]*string{
 			"AWS_LWA_PORT":         jsii.String("8080"),
 			"PORT":                 jsii.String("8080"),
@@ -67,7 +83,7 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 			"COGNITO_USER_POOL_ID": jsii.String(""), // set after deploy
 			"COGNITO_CLIENT_ID":    jsii.String(""), // set after deploy
 			"COGNITO_REGION":       jsii.String("us-east-1"),
-			"ALLOWED_ORIGINS":      jsii.String("*"),
+			"ALLOWED_ORIGINS":      webOrigin,
 			"SSM_DATABASE_URL":     jsii.String(ssmParamName), // param name, not the secret
 		},
 	})
@@ -89,10 +105,17 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 	fnUrl := fn.AddFunctionUrl(&awslambda.FunctionUrlOptions{
 		AuthType: awslambda.FunctionUrlAuthType_NONE,
 		Cors: &awslambda.FunctionUrlCorsOptions{
-			AllowedOrigins: &[]*string{jsii.String("*")},
-			AllowedMethods: &[]awslambda.HttpMethod{awslambda.HttpMethod_ALL},
-			AllowedHeaders: &[]*string{jsii.String("*")},
-			MaxAge:         awscdk.Duration_Hours(jsii.Number(1)),
+			AllowedOrigins: &[]*string{webOrigin},
+			AllowedMethods: &[]awslambda.HttpMethod{
+				awslambda.HttpMethod_GET,
+				awslambda.HttpMethod_POST,
+			},
+			AllowedHeaders: &[]*string{
+				jsii.String("Authorization"),
+				jsii.String("Content-Type"),
+				jsii.String("X-Device-API-Key"),
+			},
+			MaxAge: awscdk.Duration_Hours(jsii.Number(1)),
 		},
 	})
 
@@ -121,7 +144,7 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 		Value: jsii.String(
 			"aws lambda update-function-configuration --function-name supply-chain-api " +
 				"--environment 'Variables={COGNITO_USER_POOL_ID=us-east-1_xxx,COGNITO_CLIENT_ID=xxx," +
-				"COGNITO_REGION=us-east-1,ALLOWED_ORIGINS=*,AWS_LWA_PORT=8080,PORT=8080," +
+				"COGNITO_REGION=us-east-1,ALLOWED_ORIGINS=https://dxxxx.cloudfront.net,AWS_LWA_PORT=8080,PORT=8080," +
 				"LOG_FORMAT=json,SSM_DATABASE_URL=/supply-chain/DATABASE_URL}'",
 		),
 		Description: jsii.String("Command template to set Cognito env vars (fill in real values)"),
