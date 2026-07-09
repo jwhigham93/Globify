@@ -153,3 +153,9 @@ error.log
 myenv/
 venv/
 .venv/
+
+# RTK token savings cache
+.tokensave/
+
+# Claude Code local config
+.claude/
