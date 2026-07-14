@@ -7,7 +7,6 @@ import {
   getPointColorByType,
   transformToArcs,
   transformToDataPoints,
-  getSupplyChainVisualizationData,
 } from './supplyChainData';
 import {
   POINT_RADIUS_SUPPLIER,
@@ -210,30 +209,5 @@ describe('transformToDataPoints', () => {
 
   it('returns empty array for empty input', () => {
     expect(transformToDataPoints([])).toEqual([]);
-  });
-});
-
-// ── getSupplyChainVisualizationData ──────────────────────────────────────
-
-describe('getSupplyChainVisualizationData', () => {
-  it('returns arcs, points, locations, and routes', () => {
-    const data = getSupplyChainVisualizationData();
-    expect(data).toHaveProperty('arcs');
-    expect(data).toHaveProperty('points');
-    expect(data).toHaveProperty('locations');
-    expect(data).toHaveProperty('routes');
-  });
-
-  it('returns non-empty arrays', () => {
-    const data = getSupplyChainVisualizationData();
-    expect(data.arcs.length).toBeGreaterThan(0);
-    expect(data.points.length).toBeGreaterThan(0);
-    expect(data.locations.length).toBeGreaterThan(0);
-    expect(data.routes.length).toBeGreaterThan(0);
-  });
-
-  it('has one point per location', () => {
-    const data = getSupplyChainVisualizationData();
-    expect(data.points.length).toBe(data.locations.length);
   });
 });

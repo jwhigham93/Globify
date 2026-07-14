@@ -25,11 +25,6 @@ export const config = {
   /** AWS Cognito region */
   cognitoRegion: (extra.COGNITO_REGION as string) || 'us-east-1',
 
-  /** Whether the app is running in dev mode (no API, mock data) */
-  get isDevMode(): boolean {
-    return !this.apiBaseUrl;
-  },
-
   /** Whether Cognito auth is enabled (requires both pool ID and client ID) */
   get isAuthEnabled(): boolean {
     return !!this.cognitoUserPoolId && !!this.cognitoClientId;
