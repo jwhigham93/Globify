@@ -71,6 +71,38 @@ hand-rolled debounce and manual request-cancellation logic.
 - **THEN** the app requests a new disruption simulation keyed by the new node set
 - **AND** displays the previous result until the new one arrives
 
+### Requirement: Authenticated queries do not fire before auth is ready
+
+When Cognito auth is enabled, the app SHALL NOT issue an authenticated domain
+request before a token is available. Queries SHALL be gated on authentication
+readiness (e.g. TanStack Query `enabled: isAuthenticated`) rather than relying on
+provider nesting or effect ordering. Auth correctness takes priority over
+fetch-eagerness.
+
+#### Scenario: No unauthenticated request races ahead of the token
+
+- **WHEN** the app starts with Cognito enabled and no token yet available
+- **THEN** domain queries remain disabled and issue no network request
+- **AND** they activate only once the user is authenticated and the token is wired
+
+#### Scenario: Auth-disabled local dev fetches immediately
+
+- **WHEN** the app runs with Cognito not configured (`isAuthEnabled` false)
+- **THEN** `isAuthenticated` is true and gated queries activate without a sign-in
+
+### Requirement: Frontend specs run without a backend
+
+Frontend unit specs SHALL NOT require a running backend. Data-access hooks SHALL
+be testable with a mocked `apiClient` and a `QueryClient` test wrapper. Referential
+integrity of the seed dataset SHALL be validated in the backend, not by frontend
+specs that reach a live backend.
+
+#### Scenario: Hook specs use a mocked client
+
+- **WHEN** a data-access hook is unit-tested
+- **THEN** it runs against a mocked `apiClient` with no live network or backend
+- **AND** covers loading→success and loading→error transitions
+
 ### Requirement: Live GPS streaming is preserved
 
 The app SHALL continue to receive live vehicle positions over the existing

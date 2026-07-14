@@ -2,7 +2,7 @@
 
 - [ ] 1.1 Add `@tanstack/react-query` to `apps/Globify` (`pnpm add` in the app), verify Expo/RN compatibility
 - [ ] 1.2 Create `src/services/queries/queryClient.ts` with a configured `QueryClient` (bounded retries + backoff, sensible `staleTime`)
-- [ ] 1.3 Wrap the app root in `QueryClientProvider` in `App.tsx`; confirm `setTokenGetter` token wiring still runs before the first authenticated query (resolve design open question #2)
+- [ ] 1.3 Nest providers as `QueryClientProvider` (outermost) → `AuthProvider` → `AppContent`; keep `setTokenGetter` token wiring
 
 ## 2. Verify backend contract
 
@@ -11,6 +11,7 @@
 
 ## 3. Query hooks
 
+- [ ] 3.0 Gate every authenticated query with `enabled: isAuthenticated` so no request fires before the token is wired
 - [ ] 3.1 `useSupplyChainData()` → `GET /supply-chain/visualization`, returning `locations`, `routes`, and memoized `locationsById` / `outboundByLocationId` / `inboundByLocationId`, plus loading/error state
 - [ ] 3.2 `useNetworkRisk()` → `GET /risk/network` (+ mapper if 2.2 found drift)
 - [ ] 3.3 `useDisruptionSimulation(disabledNodeIds)` → `POST /disruption/simulate`, keyed by sorted ids, `placeholderData: keepPreviousData`
@@ -38,8 +39,10 @@
 - [ ] 6.1 Delete specs for deleted modules; keep pure-transform tests in `supplyChainData.spec.ts`
 - [ ] 6.2 Add hook specs (QueryClient test wrapper + mocked `apiClient`): loading→success and loading→error per hook; verify `useSupplyChainData` derived indexes
 - [ ] 6.3 Update `App` / `GlobeVisualization` tests that relied on dev-mode local data to mock the query hooks / `apiClient`
-- [ ] 6.4 Resolve `dataIntegrity.spec.ts` / `entityLookup.spec.ts` (design open question #1): delete or repoint at backend seed
-- [ ] 6.5 `pnpm nx test Globify` green; `pnpm nx lint Globify` clean
+- [ ] 6.4 Delete `dataIntegrity.spec.ts` / `entityLookup.spec.ts` (they asserted on deleted frontend seed arrays)
+- [ ] 6.5 Add/confirm a backend Go test validating DB-seed referential integrity (now the sole copy of the dataset)
+- [ ] 6.6 Add a hook spec asserting authenticated queries stay disabled until `isAuthenticated` (no request fires)
+- [ ] 6.7 `pnpm nx test Globify` green; `pnpm nx lint Globify` clean
 
 ## 7. Verify & document
 

@@ -72,6 +72,32 @@ getter, `isAuthEnabled` (`!!cognitoUserPoolId && !!cognitoClientId`), and
 Removing `isDevMode` needs zero auth changes; the stale comment in `App.tsx`
 implying otherwise is corrected.
 
+### Decision: Authenticated queries are gated on auth-readiness, not provider order
+Provider nesting is `QueryClientProvider` (outermost, stable app-wide cache) →
+`AuthProvider` → `AppContent`. But nesting order is NOT relied upon for
+correctness. Every authenticated query is gated with TanStack Query's
+`enabled: isAuthenticated` so a request can never fire before the token is wired
+via `setTokenGetter`. This prevents the race where a query 401s because it ran
+before `AuthProvider`'s token effect. Auth correctness takes priority over
+fetch-eagerness: a query that has no valid token simply stays disabled until it
+does.
+
+**Alternative considered — rely on provider nesting + effect ordering**: place
+`AuthProvider` above the queries and trust that `setTokenGetter` runs before the
+first fetch. Rejected: effect timing is fragile and a missed wiring silently
+degrades to unauthenticated requests. Explicit `enabled` gating is a hard
+guarantee.
+
+### Decision: Frontend specs never require a running backend
+The removal of dev mode makes the *running app* depend on the API, but frontend
+*unit specs* MUST NOT. Hook specs render with a `QueryClientProvider` test wrapper
+and a mocked `apiClient` — no live backend, no socket. Referential-integrity
+checks that previously validated the hardcoded frontend seed arrays
+(`dataIntegrity.spec.ts`, `entityLookup.spec.ts`) move to the backend: the DB seed
+is now the sole copy, so its integrity is a Go-test concern. The frontend specs
+are deleted rather than repointed at a live backend (which would violate this
+principle).
+
 ## Data flow
 
 ```
@@ -116,15 +142,17 @@ corresponding hook rather than changing the panels.
   loading/error state from its query — no silent local recompute.
 - **QueryClient**: bounded retries with backoff.
 
-## Open questions (resolve during implementation)
+## Resolved decisions
 
-1. **`dataIntegrity.spec.ts` / `entityLookup.spec.ts`** — these import
-   `supplyChain*`. If they assert against the deleted hardcoded arrays, either
-   delete them (data now lives only in the DB seed) or repoint them at the backend
-   seed as source of truth.
-2. **`QueryClientProvider` placement** relative to `AuthProvider` — provider must
-   wrap `AppContent`; confirm token wiring via `setTokenGetter` still runs before
-   the first authenticated query.
+Both prior open questions are resolved above:
+
+1. **`dataIntegrity.spec.ts` / `entityLookup.spec.ts`** — deleted; seed-data
+   integrity becomes a backend Go-test concern (see "Frontend specs never require
+   a running backend"). Frontend specs continue to mock `apiClient`.
+2. **`QueryClientProvider` placement** — `QueryClientProvider` outermost →
+   `AuthProvider` → `AppContent`, with authenticated queries gated by
+   `enabled: isAuthenticated` rather than relying on nesting/effect order (see
+   "Authenticated queries are gated on auth-readiness").
 
 ## Risks / Trade-offs
 
