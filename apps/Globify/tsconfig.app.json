@@ -4,6 +4,7 @@
     "outDir": "dist",
     "types": ["node"],
     "rootDir": "src",
+    "lib": ["es2022", "dom", "dom.iterable"],
     "jsx": "react-jsx",
     "noUnusedLocals": false,
     "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo"

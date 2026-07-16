@@ -11,7 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -20,6 +21,7 @@ import (
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/auth"
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/db"
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/ws"
+	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wshub"
 )
 
 func main() {
@@ -29,6 +31,9 @@ func main() {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	}
 
+	// ── AWS config (shared by SSM + WebSocket hub) ───────────────────
+	awsCfg, awsCfgErr := awsconfig.LoadDefaultConfig(context.Background())
+
 	// ── Database ─────────────────────────────────────────────────────
 	dbURL := os.Getenv("DATABASE_URL")
 
@@ -36,7 +41,10 @@ func main() {
 	// AWS SSM Parameter Store (SecureString). This keeps the Neon password
 	// out of Lambda env vars. Falls back to DATABASE_URL for local dev.
 	if ssmName := os.Getenv("SSM_DATABASE_URL"); ssmName != "" {
-		val, err := readSSMParameter(context.Background(), ssmName)
+		if awsCfgErr != nil {
+			log.Fatal().Err(awsCfgErr).Msg("failed to load AWS config for SSM")
+		}
+		val, err := readSSMParameter(context.Background(), awsCfg, ssmName)
 		if err != nil {
 			log.Fatal().Err(err).Str("param", ssmName).Msg("failed to read DATABASE_URL from SSM")
 		}
@@ -74,11 +82,28 @@ func main() {
 	}
 
 	// ── WebSocket hub ────────────────────────────────────────────────
-	hub := ws.NewHub()
-	go hub.Run()
+	// Production (Lambda): DynamoDB-backed hub via API Gateway WebSocket API.
+	// Local dev: gorilla hub with persistent in-process connections.
+	var gorillaHub *ws.Hub
+	var ddbHub *wshub.Hub
+
+	dynamoTable := os.Getenv("DYNAMODB_WS_TABLE")
+	wsEndpoint := os.Getenv("APIGW_WS_ENDPOINT")
+	if dynamoTable != "" && wsEndpoint != "" {
+		if awsCfgErr != nil {
+			log.Fatal().Err(awsCfgErr).Msg("failed to load AWS config for WebSocket hub")
+		}
+		ddbHub = wshub.New(awsCfg, dynamoTable, wsEndpoint)
+		log.Info().Str("table", dynamoTable).Msg("using DynamoDB WebSocket hub")
+	} else {
+		gorillaHub = ws.NewHub()
+		go gorillaHub.Run()
+		log.Info().Msg("using local gorilla WebSocket hub")
+	}
 
 	// ── Router ───────────────────────────────────────────────────────
-	router := api.NewRouter(pool, verifier, hub)
+	simToken := os.Getenv("GPS_SIM_TOKEN")
+	router := api.NewRouter(pool, verifier, gorillaHub, ddbHub, simToken)
 
 	// ── Server ───────────────────────────────────────────────────────
 	port := os.Getenv("PORT")
@@ -105,11 +130,9 @@ func main() {
 		}
 	}()
 
-	// Block until signal received.
 	<-ctx.Done()
 	stop() // allow second signal to force-kill
 
-	// In Go 1.26, context.Cause(ctx) returns the signal that triggered cancellation.
 	if cause := context.Cause(ctx); cause != nil {
 		log.Info().Str("cause", fmt.Sprintf("%v", cause)).Msg("shutdown signal received")
 	}
@@ -118,7 +141,9 @@ func main() {
 	defer cancel()
 
 	log.Info().Msg("shutting down gracefully…")
-	hub.Shutdown()
+	if gorillaHub != nil {
+		gorillaHub.Shutdown()
+	}
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error().Err(err).Msg("forced shutdown")
 	}
@@ -126,12 +151,7 @@ func main() {
 }
 
 // readSSMParameter reads a SecureString parameter from AWS SSM Parameter Store.
-func readSSMParameter(ctx context.Context, name string) (string, error) {
-	cfg, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return "", fmt.Errorf("loading AWS config: %w", err)
-	}
-
+func readSSMParameter(ctx context.Context, cfg aws.Config, name string) (string, error) {
 	client := ssm.NewFromConfig(cfg)
 	out, err := client.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           &name,

@@ -8,7 +8,7 @@ Three profiles target different cost/capability tradeoffs:
 
 | | **Full** (`-c profile=full`) | **Lite** (`-c profile=lite`) | **Ultra-lite** (`-c profile=ultra-lite`) |
 |---|---|---|---|
-| **Compute** | EKS (2-6 pods, ALB) | App Runner (0.25 vCPU) | Lambda + Function URL |
+| **Compute** | EKS (2-6 pods, ALB) | App Runner (0.25 vCPU) | Lambda + API Gateway HTTP API |
 | **Database** | RDS PostgreSQL 16 | RDS PostgreSQL 16 | External (Neon free tier) |
 | **Network** | VPC + NAT Gateway | VPC + NAT instance | No VPC |
 | **WAF** | ALB + CloudFront | CloudFront only | None (Lambda throttling) |
@@ -79,7 +79,7 @@ cdk deploy --all -c profile=ultra-lite  # side project
 │  │ Lambda Web Adapter      │  │
 │  │ → Go HTTP server        │  │
 │  └─────────────────────────┘  │
-│  Function URL (HTTPS)         │
+│  API Gateway HTTP API (HTTPS) │
 └───────────────────────────────┘
           │
           ▼ (internet)
@@ -103,7 +103,7 @@ cdk deploy --all -c profile=ultra-lite  # side project
 | **SupplyChainSecurity** | Full, Lite | WAF Web ACLs (REGIONAL + CLOUDFRONT) | ACL ARNs |
 | **SupplyChainCluster** | Full | EKS, node group, ALB Controller, IRSA | Cluster endpoint |
 | **SupplyChainAppRunner** | Lite | App Runner, VPC connector, auto-deploy | Service URL |
-| **SupplyChainLambdaApi** | Ultra-lite | Lambda (container), Function URL | Function URL |
+| **SupplyChainLambdaApi** | Ultra-lite | Lambda (zip asset), API Gateway HTTP API | API Gateway HTTP API |
 | **GlobifyWebHosting** | All | S3 bucket, CloudFront, OAI | CloudFront URL |
 | **SupplyChainBudget** | All | Budget alarms (80%, 100%, forecast) | — |
 
@@ -363,7 +363,7 @@ Same as Full Profile step 5 (S3 sync + CloudFront invalidation).
 
 ### 7. Update Globify config
 
-Point `API_BASE_URL` to the Lambda Function URL from CDK outputs.
+Point `API_BASE_URL` to the API Gateway HTTP API endpoint from CDK outputs.
 
 ---
 

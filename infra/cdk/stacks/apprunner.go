@@ -60,7 +60,7 @@ func NewAppRunnerStack(scope constructs.Construct, id string, props *AppRunnerSt
 	vpcConnector := awsapprunner.NewCfnVpcConnector(stack, jsii.String("VpcConnector"), &awsapprunner.CfnVpcConnectorProps{
 		VpcConnectorName: jsii.String("supply-chain-vpc-connector"),
 		Subnets:          privateSubnetIds(props.Vpc),
-		SecurityGroups:   &[]*string{vpcConnectorSG.SecurityGroupId()},
+		SecurityGroups:   &[]interface{}{vpcConnectorSG.SecurityGroupId()},
 	})
 
 	// ── App Runner Service ───────────────────────────────────────

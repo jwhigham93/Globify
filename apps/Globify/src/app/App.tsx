@@ -19,12 +19,22 @@ import { useSupplyChainData } from '../services/queries/useSupplyChainData';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { SignInScreen } from './SignInScreen';
 
+declare global {
+  interface Window { __hideLoadingShell?: () => void; }
+}
+
 /**
  * Inner app shell — uses auth context.
  * Loads supply-chain topology from the backend via TanStack Query.
  */
 const AppContent = () => {
   const { isAuthenticated, isLoading: authLoading, token } = useAuth();
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.__hideLoadingShell) {
+      window.__hideLoadingShell();
+    }
+  }, []);
 
   // Wire the token getter so apiClient can attach JWT headers
   useEffect(() => {

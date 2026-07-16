@@ -1,0 +1,65 @@
+name: Database Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      direction:
+        description: 'Migration direction'
+        required: true
+        default: up
+        type: choice
+        options: [up, down]
+      steps:
+        description: 'Number of steps (leave blank for all up / 1 for down)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+# Never let two migration runs overlap — a concurrent up/down could corrupt the
+# schema_migrations dirty state.
+concurrency:
+  group: db-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Run migrations (${{ inputs.direction }})
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install golang-migrate
+        run: |
+          curl -fsSL \
+            https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz \
+            | tar -xz
+          sudo mv migrate /usr/local/bin/migrate
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          DIRECTION: ${{ inputs.direction }}
+          STEPS: ${{ inputs.steps }}
+        run: |
+          # Validate direction is only 'up' or 'down' (defence-in-depth against enum bypass)
+          if [[ "$DIRECTION" != "up" && "$DIRECTION" != "down" ]]; then
+            echo "Invalid direction: $DIRECTION" && exit 1
+          fi
+
+          MIGRATE_PATH="services/supply-chain-api/migrations"
+
+          if [[ -n "$STEPS" ]]; then
+            # Validate steps is a non-negative integer
+            if ! [[ "$STEPS" =~ ^[0-9]+$ ]]; then
+              echo "Invalid steps value: must be a non-negative integer" && exit 1
+            fi
+            migrate -path "$MIGRATE_PATH" -database "$DATABASE_URL?sslmode=require" "$DIRECTION" "$STEPS"
+          else
+            migrate -path "$MIGRATE_PATH" -database "$DATABASE_URL?sslmode=require" "$DIRECTION"
+          fi

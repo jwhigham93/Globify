@@ -15,6 +15,7 @@ import (
 
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/auth"
 	wsHub "github.com/jwhig/jw-dev/services/supply-chain-api/internal/ws"
+	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wshub"
 )
 
 // defaultDevOrigin is used when ALLOWED_ORIGINS is unset (local Expo web dev).
@@ -44,9 +45,10 @@ func parseAllowedOrigins() []string {
 
 // NewRouter sets up the chi router with all routes, middleware, and CORS.
 //
-// verifier validates Cognito access tokens; pass nil to disable authentication
-// (local dev only — the server only does this when AUTH_DISABLED=true).
-func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi.Mux {
+// gorillaHub is the local-dev gorilla WebSocket hub (nil in production).
+// ddbHub is the DynamoDB-backed hub for Lambda/API Gateway (nil in local dev).
+// Pass exactly one non-nil hub; the other should be nil.
+func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, gorillaHub *wsHub.Hub, ddbHub *wshub.Hub, simToken string) *chi.Mux {
 	r := chi.NewRouter()
 
 	// ── Global middleware ─────────────────────────────────────────────
@@ -65,14 +67,16 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi
 	}).Handler)
 
 	// ── Health checks (no auth — infra probes) ───────────────────────
-	// Liveness (/healthz) and readiness (/readyz) must be reachable by
-	// orchestrator probes (e.g. the EKS readinessProbe in k8s/deployment.yaml)
-	// without credentials. /readyz only exposes DB-up status and a WS client
-	// count — operational data, not user data — so it stays public.
 	r.Get("/healthz", HealthzHandler())
-	r.Get("/readyz", ReadyzHandler(pool, hub))
+	r.Get("/readyz", ReadyzHandler(pool, gorillaHub))
 
 	h := NewHandlers(pool)
+	// Set the broadcaster: DynamoDB hub in production, gorilla hub in local dev.
+	if ddbHub != nil {
+		h.hub = ddbHub
+	} else if gorillaHub != nil {
+		h.hub = gorillaHub
+	}
 
 	// ── Authenticated API routes ─────────────────────────────────────
 	r.Group(func(r chi.Router) {
@@ -82,6 +86,8 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi
 		r.Use(httprate.LimitByIP(100, time.Minute))
 		if verifier != nil {
 			r.Use(verifier.Middleware())
+		} else {
+			r.Use(auth.DevAuthMiddleware)
 		}
 
 		r.Route("/api/v1", func(r chi.Router) {
@@ -124,13 +130,35 @@ func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, hub *wsHub.Hub) *chi
 		r.Post("/", h.HandleIngestGpsPing)
 	})
 
-	// ── WebSocket stream (single-use ticket auth via ?ticket=) ───────
-	// Rate-limited per IP: redemption runs a DB DELETE...RETURNING, so cap
-	// unauthenticated probing of random ?ticket= values before it hits the DB.
-	if hub != nil {
+	// ── Local-dev WebSocket upgrade (gorilla, persistent connection) ─
+	if gorillaHub != nil {
 		r.With(httprate.LimitByIP(60, time.Minute)).
-			Get("/api/v1/vehicles/stream", HandleWebSocketUpgrade(pool, hub, verifier != nil))
-		h.hub = hub
+			Get("/api/v1/vehicles/stream", HandleWebSocketUpgrade(pool, gorillaHub, verifier != nil))
+	}
+
+	// ── API Gateway WebSocket event routes (via Lambda Web Adapter) ──
+	// WebSocket event routes inside Lambda. LWA v0.8+ is supposed to map
+	// $connect → POST /_ws/connect, but in practice routes non-HTTP Lambda events
+	// to POST /events (its pass-through default). We register both paths so the
+	// handler works regardless of LWA version behaviour.
+	if ddbHub != nil {
+		authEnabled := verifier != nil
+		// Primary: LWA pass-through default for non-HTTP events.
+		// Fix #5: apply the same per-IP rate limit as /_ws/connect so a public
+		// caller cannot flood /events (which is unfortunately reachable via the
+		// HTTP API catch-all route alongside the intended WebSocket/EventBridge path).
+		wsEventLimit := httprate.LimitByIP(60, time.Minute)
+		r.With(wsEventLimit).
+			Post("/events", HandleLambdaEvents(pool, ddbHub, authEnabled, simToken))
+		// Fallback: explicit LWA WebSocket path mappings (kept for future-proofing).
+		// Every public fallback route carries the same limiter — /_ws/disconnect
+		// triggers a DynamoDB delete per request, so it must not be left uncapped.
+		r.With(wsEventLimit).
+			Post("/_ws/connect", HandleWsConnect(pool, ddbHub, authEnabled))
+		r.With(wsEventLimit).
+			Post("/_ws/disconnect", HandleWsDisconnect(ddbHub))
+		r.With(wsEventLimit).
+			Post("/_ws/default", HandleWsDefault())
 	}
 
 	return r
