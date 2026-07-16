@@ -17,9 +17,10 @@ jest.mock('../../app/AuthProvider', () => ({
 
 const mockedGet = apiClient.get as jest.MockedFunction<typeof apiClient.get>;
 
-function wrapper({ children }: { children: React.ReactNode }) {
+function makeWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return React.createElement(QueryClientProvider, { client }, children);
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client }, children);
 }
 
 const routeFixture = {
@@ -38,7 +39,7 @@ describe('useVehicleRoute', () => {
   it('fetches the route for the selected vehicle', async () => {
     mockedGet.mockResolvedValueOnce(routeFixture);
 
-    const { result } = renderHook(() => useVehicleRoute('truck-7'), { wrapper });
+    const { result } = renderHook(() => useVehicleRoute('truck-7'), { wrapper: makeWrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockedGet).toHaveBeenCalledWith('/vehicles/truck-7/route');
@@ -46,7 +47,7 @@ describe('useVehicleRoute', () => {
   });
 
   it('stays idle when no vehicle is selected', () => {
-    const { result } = renderHook(() => useVehicleRoute(null), { wrapper });
+    const { result } = renderHook(() => useVehicleRoute(null), { wrapper: makeWrapper() });
 
     expect(result.current.fetchStatus).toBe('idle');
     expect(mockedGet).not.toHaveBeenCalled();
@@ -55,7 +56,7 @@ describe('useVehicleRoute', () => {
   it('stays disabled while unauthenticated', () => {
     mockAuthenticated = false;
 
-    const { result } = renderHook(() => useVehicleRoute('truck-7'), { wrapper });
+    const { result } = renderHook(() => useVehicleRoute('truck-7'), { wrapper: makeWrapper() });
 
     expect(result.current.fetchStatus).toBe('idle');
     expect(mockedGet).not.toHaveBeenCalled();

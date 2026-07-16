@@ -171,7 +171,11 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   const isMobile = Platform.OS !== 'web';
 
   // ── Network Risk Metrics ─────────────────────────────────────────
-  const { data: networkRiskMetrics = EMPTY_NETWORK_RISK, isError: isRiskError } = useNetworkRisk();
+  const {
+    data: networkRiskMetrics = EMPTY_NETWORK_RISK,
+    isSuccess: isRiskSuccess,
+    isError: isRiskError,
+  } = useNetworkRisk();
 
   // ── Disruption Metrics ───────────────────────────────────────────
   // Keyed by the disabled-node set; React Query dedupes requests, so no manual
@@ -599,10 +603,11 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
           </View>
         </View>
       )}
-      {/* Risk summary panel — hidden when the risk query failed (banner shows instead) */}
+      {/* Risk summary panel — only rendered from a successful query, so loading
+          and failure states never appear as zeroed metrics */}
       <RiskPanel
         metrics={networkRiskMetrics}
-        visible={viewMode === 'concentration-risk' && !isRiskError}
+        visible={viewMode === 'concentration-risk' && isRiskSuccess}
       />
       {/* Disruption impact panel — only rendered from a successful simulation */}
       <DisruptionPanel

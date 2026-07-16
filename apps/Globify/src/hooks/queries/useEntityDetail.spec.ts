@@ -17,9 +17,10 @@ jest.mock('../../app/AuthProvider', () => ({
 
 const mockedGet = apiClient.get as jest.MockedFunction<typeof apiClient.get>;
 
-function wrapper({ children }: { children: React.ReactNode }) {
+function makeWrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return React.createElement(QueryClientProvider, { client }, children);
+  return ({ children }: { children: React.ReactNode }) =>
+    React.createElement(QueryClientProvider, { client }, children);
 }
 
 beforeEach(() => {
@@ -32,7 +33,7 @@ describe('useEntityDetail', () => {
     const detail = { type: 'supplier', location: { id: 'sup-1' } };
     mockedGet.mockResolvedValueOnce(detail);
 
-    const { result } = renderHook(() => useEntityDetail('sup-1'), { wrapper });
+    const { result } = renderHook(() => useEntityDetail('sup-1'), { wrapper: makeWrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockedGet).toHaveBeenCalledWith('/entities/sup-1');
@@ -40,7 +41,7 @@ describe('useEntityDetail', () => {
   });
 
   it('stays idle when no location is selected', () => {
-    const { result } = renderHook(() => useEntityDetail(null), { wrapper });
+    const { result } = renderHook(() => useEntityDetail(null), { wrapper: makeWrapper() });
 
     expect(result.current.fetchStatus).toBe('idle');
     expect(mockedGet).not.toHaveBeenCalled();
@@ -49,7 +50,7 @@ describe('useEntityDetail', () => {
   it('stays disabled while unauthenticated', () => {
     mockAuthenticated = false;
 
-    const { result } = renderHook(() => useEntityDetail('sup-1'), { wrapper });
+    const { result } = renderHook(() => useEntityDetail('sup-1'), { wrapper: makeWrapper() });
 
     expect(result.current.fetchStatus).toBe('idle');
     expect(mockedGet).not.toHaveBeenCalled();

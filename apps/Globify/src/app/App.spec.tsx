@@ -106,12 +106,12 @@ jest.mock('../hooks/queries/useSupplyChainData', () => {
   }),
   };
 });
-jest.mock('../hooks/queries/useNetworkRisk', () => ({ useNetworkRisk: () => ({ data: undefined }) }));
+jest.mock('../hooks/queries/useNetworkRisk', () => ({ useNetworkRisk: () => ({ data: undefined, isSuccess: false, isError: false }) }));
 jest.mock('../hooks/queries/useDisruptionSimulation', () => ({
-  useDisruptionSimulation: () => ({ data: undefined }),
+  useDisruptionSimulation: () => ({ data: undefined, isSuccess: false, isError: false }),
 }));
-jest.mock('../hooks/queries/useEntityDetail', () => ({ useEntityDetail: () => ({ data: undefined }) }));
-jest.mock('../hooks/queries/useVehicleRoute', () => ({ useVehicleRoute: () => ({ data: undefined }) }));
+jest.mock('../hooks/queries/useEntityDetail', () => ({ useEntityDetail: () => ({ data: undefined, isSuccess: false, isError: false }) }));
+jest.mock('../hooks/queries/useVehicleRoute', () => ({ useVehicleRoute: () => ({ data: undefined, isSuccess: false, isError: false }) }));
 
 describe('App Component', () => {
   it('should render GlobeVisualization component', () => {
