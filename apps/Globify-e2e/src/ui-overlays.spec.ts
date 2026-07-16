@@ -6,6 +6,11 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { mockApi } from './support/mockApi';
+
+test.beforeEach(async ({ page }) => {
+  await mockApi(page);
+});
 
 test.describe('UI Overlays', () => {
   test.beforeEach(async ({ page }) => {
