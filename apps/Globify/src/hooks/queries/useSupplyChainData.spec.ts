@@ -6,9 +6,9 @@ import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useSupplyChainData } from './useSupplyChainData';
-import * as apiClient from '../apiClient';
+import * as apiClient from '../../services/apiClient';
 
-jest.mock('../apiClient');
+jest.mock('../../services/apiClient');
 jest.mock('../../app/AuthProvider', () => ({ useAuth: () => ({ isAuthenticated: true }) }));
 
 const mockedGet = apiClient.get as jest.MockedFunction<typeof apiClient.get>;

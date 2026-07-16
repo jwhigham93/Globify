@@ -6,7 +6,7 @@
  * loading/error state. ApiError (HTTP 4xx/5xx) is not worth retrying.
  */
 import { QueryClient } from '@tanstack/react-query';
-import { ApiError } from '../apiClient';
+import { ApiError } from '../../services/apiClient';
 
 export const queryClient = new QueryClient({
   defaultOptions: {

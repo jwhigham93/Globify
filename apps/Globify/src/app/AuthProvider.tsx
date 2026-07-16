@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import * as authService from '../services/authService';
 import { setTokenGetter } from '../services/apiClient';
 import { config } from '../services/config';
+import { queryClient } from '../hooks/queries/queryClient';
 
 interface AuthContextValue {
   isAuthenticated: boolean;
@@ -87,6 +88,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     authService.signOut(); // clears tokens + redirects to Cognito logout
     setToken(null);
+    // Drop all cached backend data so nothing leaks into the next session
+    queryClient.clear();
   }, []);
 
   return (

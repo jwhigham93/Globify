@@ -14,8 +14,8 @@ import { GlobeVisualization } from '../components/Globe/GlobeVisualization';
 import { transformToArcs, transformToDataPoints } from '../services/supplyChainData';
 import { DEFAULT_BACKGROUND_COLOR } from '../components/Globe';
 import { setTokenGetter } from '../services/apiClient';
-import { queryClient } from '../services/queries/queryClient';
-import { useSupplyChainData } from '../services/queries/useSupplyChainData';
+import { queryClient } from '../hooks/queries/queryClient';
+import { useSupplyChainData } from '../hooks/queries/useSupplyChainData';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { SignInScreen } from './SignInScreen';
 

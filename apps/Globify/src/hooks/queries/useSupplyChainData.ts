@@ -6,7 +6,7 @@
  */
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import * as apiClient from '../apiClient';
+import * as apiClient from '../../services/apiClient';
 import { useAuth } from '../../app/AuthProvider';
 import type { Location, SupplyRoute } from '../../components/Globe/types';
 

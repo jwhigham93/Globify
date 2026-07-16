@@ -17,7 +17,7 @@ import type {
   SelectedRestaurant,
   SelectedCluster,
 } from './types';
-import { useSupplyChainData } from '../../services/queries/useSupplyChainData';
+import { useSupplyChainData } from '../../hooks/queries/useSupplyChainData';
 
 const NARROW_BREAKPOINT = 600;
 

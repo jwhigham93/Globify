@@ -1,7 +1,7 @@
 ## 1. Setup
 
 - [x] 1.1 Add `@tanstack/react-query` to `apps/Globify` (`pnpm add` in the app), verify Expo/RN compatibility
-- [x] 1.2 Create `src/services/queries/queryClient.ts` with a configured `QueryClient` (bounded retries + backoff, sensible `staleTime`)
+- [x] 1.2 Create `src/hooks/queries/queryClient.ts` with a configured `QueryClient` (bounded retries + backoff, sensible `staleTime`)
 - [x] 1.3 Nest providers as `QueryClientProvider` (outermost) → `AuthProvider` → `AppContent`; keep `setTokenGetter` token wiring
 
 ## 2. Verify backend contract

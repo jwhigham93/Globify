@@ -4,7 +4,7 @@
  * selections are built client-side and do not use this hook.
  */
 import { useQuery } from '@tanstack/react-query';
-import * as apiClient from '../apiClient';
+import * as apiClient from '../../services/apiClient';
 import { useAuth } from '../../app/AuthProvider';
 import type { SelectedSupplier, SelectedDC, SelectedRestaurant } from '../../components/Globe/types';
 

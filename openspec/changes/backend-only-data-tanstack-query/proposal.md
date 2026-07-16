@@ -48,7 +48,7 @@ is pure liability.
 
 - **Frontend** (`apps/Globify`): deletes 5 service modules + specs, trims
   `supplyChainData.ts`, rewrites data wiring in `App.tsx`, `GlobeVisualization.tsx`,
-  and `EntityDetailPanel.tsx`. New `src/services/queries/` directory.
+  and `EntityDetailPanel.tsx`. New `src/hooks/queries/` directory.
 - **Dependency**: adds `@tanstack/react-query` to `apps/Globify`.
 - **Config**: removes `config.isDevMode`.
 - **Tests**: deletes specs for removed modules; adds hook specs; updates

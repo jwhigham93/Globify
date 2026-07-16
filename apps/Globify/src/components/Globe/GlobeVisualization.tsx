@@ -28,11 +28,11 @@ import { applySelectionToPoints, applySelectionToArcs, SELECTION_DIM_NODE_COLOR,
 import { clusterByZoom, isClusterId, getClusterById, LOD_CLUSTER_CAMERA_THRESHOLD } from '../../services/lodClustering';
 import { config } from '../../services/config';
 import { useVehiclePositions } from '../../services/useVehiclePositions';
-import { useSupplyChainData } from '../../services/queries/useSupplyChainData';
-import { useNetworkRisk } from '../../services/queries/useNetworkRisk';
-import { useDisruptionSimulation } from '../../services/queries/useDisruptionSimulation';
-import { useEntityDetail } from '../../services/queries/useEntityDetail';
-import { useVehicleRoute } from '../../services/queries/useVehicleRoute';
+import { useSupplyChainData } from '../../hooks/queries/useSupplyChainData';
+import { useNetworkRisk } from '../../hooks/queries/useNetworkRisk';
+import { useDisruptionSimulation } from '../../hooks/queries/useDisruptionSimulation';
+import { useEntityDetail } from '../../hooks/queries/useEntityDetail';
+import { useVehicleRoute } from '../../hooks/queries/useVehicleRoute';
 
 /**
  * Main GlobeVisualization component
@@ -96,7 +96,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
     : null;
 
   // ── Route polyline for selected truck ────────────────────────────
-  const { data: vehicleRoute } = useVehicleRoute(selectedTruckId);
+  const { data: vehicleRoute, isError: isRouteError } = useVehicleRoute(selectedTruckId);
   const routeEndpoints = useMemo(
     () =>
       vehicleRoute
@@ -171,21 +171,37 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   const isMobile = Platform.OS !== 'web';
 
   // ── Network Risk Metrics ─────────────────────────────────────────
-  const { data: networkRiskMetrics = EMPTY_NETWORK_RISK } = useNetworkRisk();
+  const { data: networkRiskMetrics = EMPTY_NETWORK_RISK, isError: isRiskError } = useNetworkRisk();
 
   // ── Disruption Metrics ───────────────────────────────────────────
-  // Keyed by the disabled-node set; React Query dedupes and retains the previous
-  // result while refetching, so no manual debounce/cancellation is needed.
+  // Keyed by the disabled-node set; React Query dedupes requests, so no manual
+  // debounce/cancellation is needed. No placeholder data: the panel is gated on
+  // isSuccess so a failed or in-flight simulation never renders as zero impact.
   const disabledIdList = useMemo(() => Array.from(disabledNodeIds), [disabledNodeIds]);
-  const { data: disruptionData } = useDisruptionSimulation(disabledIdList);
+  const {
+    data: disruptionData,
+    isSuccess: isDisruptionSuccess,
+    isError: isDisruptionError,
+  } = useDisruptionSimulation(disabledIdList);
   const disruptionMetrics =
     disabledNodeIds.size === 0 ? EMPTY_DISRUPTION : disruptionData ?? EMPTY_DISRUPTION;
 
   // ── Entity detail for a clicked supplier/dc/restaurant ───────────
-  const { data: entityDetail } = useEntityDetail(selectedLocationId);
+  const { data: entityDetail, isError: isEntityError } = useEntityDetail(selectedLocationId);
   // The active inspect-panel entity: a client-built cluster/route, else the
   // fetched location detail.
   const activeEntity: SelectedEntity | null = selectedEntity ?? entityDetail ?? null;
+
+  // Backend query failures for the currently relevant data — surfaced as a
+  // banner rather than silently rendering empty/zeroed domain data.
+  const failedQueries = [
+    viewMode === 'concentration-risk' && isRiskError ? 'risk metrics' : null,
+    viewMode === 'disruption' && disabledNodeIds.size > 0 && isDisruptionError
+      ? 'disruption simulation'
+      : null,
+    selectedLocationId && isEntityError ? 'location details' : null,
+    selectedTruckId && isRouteError ? 'vehicle route' : null,
+  ].filter((label): label is string => !!label);
 
   // Set of orphaned restaurant IDs for visual highlighting
   const orphanedIds = useMemo(
@@ -555,15 +571,43 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
         />
         <ViewModeToggle viewMode={viewMode} onToggle={toggleViewMode} />
       </View>
-      {/* Risk summary panel */}
+      {/* Backend data failure banner */}
+      {failedQueries.length > 0 && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 16,
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              borderRadius: 20,
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              borderWidth: 1,
+              borderColor: 'rgba(255, 107, 107, 0.5)',
+            }}
+          >
+            <Text style={{ color: '#ff6b6b', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
+              Failed to load {failedQueries.join(', ')}
+            </Text>
+          </View>
+        </View>
+      )}
+      {/* Risk summary panel — hidden when the risk query failed (banner shows instead) */}
       <RiskPanel
         metrics={networkRiskMetrics}
-        visible={viewMode === 'concentration-risk'}
+        visible={viewMode === 'concentration-risk' && !isRiskError}
       />
-      {/* Disruption impact panel */}
+      {/* Disruption impact panel — only rendered from a successful simulation */}
       <DisruptionPanel
         metrics={disruptionMetrics}
-        visible={viewMode === 'disruption' && disabledNodeIds.size > 0}
+        visible={viewMode === 'disruption' && disabledNodeIds.size > 0 && isDisruptionSuccess}
         onResetAll={handleResetAll}
       />
       {/* Entity detail inspect panel */}

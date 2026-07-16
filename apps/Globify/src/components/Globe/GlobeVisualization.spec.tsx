@@ -94,7 +94,7 @@ jest.mock('../../services/useVehiclePositions', () => ({
 }));
 
 // Mock the data-access hooks so the component renders without a QueryClient.
-jest.mock('../../services/queries/useSupplyChainData', () => ({
+jest.mock('../../hooks/queries/useSupplyChainData', () => ({
   useSupplyChainData: () => ({
     locations: [],
     routes: [],
@@ -107,12 +107,12 @@ jest.mock('../../services/queries/useSupplyChainData', () => ({
     refetch: jest.fn(),
   }),
 }));
-jest.mock('../../services/queries/useNetworkRisk', () => ({ useNetworkRisk: () => ({ data: undefined }) }));
-jest.mock('../../services/queries/useDisruptionSimulation', () => ({
+jest.mock('../../hooks/queries/useNetworkRisk', () => ({ useNetworkRisk: () => ({ data: undefined }) }));
+jest.mock('../../hooks/queries/useDisruptionSimulation', () => ({
   useDisruptionSimulation: () => ({ data: undefined }),
 }));
-jest.mock('../../services/queries/useEntityDetail', () => ({ useEntityDetail: () => ({ data: undefined }) }));
-jest.mock('../../services/queries/useVehicleRoute', () => ({ useVehicleRoute: () => ({ data: undefined }) }));
+jest.mock('../../hooks/queries/useEntityDetail', () => ({ useEntityDetail: () => ({ data: undefined }) }));
+jest.mock('../../hooks/queries/useVehicleRoute', () => ({ useVehicleRoute: () => ({ data: undefined }) }));
 
 describe('GlobeVisualization Component', () => {
   describe('Rendering', () => {

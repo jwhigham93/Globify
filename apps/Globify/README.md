@@ -7,7 +7,7 @@ React Native + Expo 54 app rendering the supply-chain globe.
 The backend API is the **single source of truth** for all domain data — topology
 (locations/routes), network risk, disruption simulation, and entity detail. The
 app has **no offline/mock data path**; it fetches everything from the API using
-[TanStack Query](https://tanstack.com/query) (see `src/services/queries/`).
+[TanStack Query](https://tanstack.com/query) (see `src/hooks/queries/`).
 
 ## Running locally
 

@@ -3,7 +3,7 @@
  * Replaces the former frontend computeNetworkRiskMetrics.
  */
 import { useQuery } from '@tanstack/react-query';
-import * as apiClient from '../apiClient';
+import * as apiClient from '../../services/apiClient';
 import { useAuth } from '../../app/AuthProvider';
 import type { NetworkRiskMetrics } from '../../components/Globe/types';
 

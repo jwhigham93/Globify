@@ -14,7 +14,7 @@ import type {
 
 // Mock the topology query hook so the panel resolves names from a fixed index
 // without a QueryClient or network.
-jest.mock('../../services/queries/useSupplyChainData', () => ({
+jest.mock('../../hooks/queries/useSupplyChainData', () => ({
   useSupplyChainData: () => ({
     locationsById: new Map<string, { id: string; name: string; lat: number; lng: number; type: string }>([
       ['dc-1', { id: 'dc-1', name: 'DC One', lat: 33, lng: -84, type: 'dc' }],
