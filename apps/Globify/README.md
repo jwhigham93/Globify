@@ -19,11 +19,13 @@ cd services/supply-chain-api
 docker compose up            # Postgres + API on http://localhost:8080
 
 # 2. Point the app at the API and start Expo (from the repo root)
-pnpm nx serve Globify
+EXPO_PUBLIC_API_BASE_URL=http://localhost:8080 pnpm nx serve Globify --web
+# → http://localhost:8081
 ```
 
-Set `API_BASE_URL` (via `expo.extra` in `app.json` or an EAS profile) to the
-API's base URL. Without it, data requests fail — there is no local fallback.
+Set `API_BASE_URL` (via `EXPO_PUBLIC_API_BASE_URL`, `expo.extra` in `app.json`, or
+an EAS profile) to the API's base URL. Without it, data requests fail — there is
+no local fallback.
 
 ### Auth in local dev
 

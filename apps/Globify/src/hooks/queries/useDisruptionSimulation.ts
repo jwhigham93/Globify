@@ -19,6 +19,6 @@ export function useDisruptionSimulation(disabledNodeIds: string[]) {
     queryKey: ['disruption', 'simulate', sortedIds],
     queryFn: () =>
       apiClient.post<DisruptionMetrics>('/disruption/simulate', { disabledIds: sortedIds }),
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && sortedIds.length > 0,
   });
 }

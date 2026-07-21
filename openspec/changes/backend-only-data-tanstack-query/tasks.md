@@ -46,5 +46,5 @@
 
 ## 7. Verify & document
 
-- [ ] 7.1 Run the app against the local API (`docker compose up`); confirm globe, risk, disruption toggle, entity panel, and live trucks all render from the backend
+- [x] 7.1 Run the app against the local API (`docker compose up`); confirm globe, risk, disruption toggle, entity panel, and live trucks all render from the backend
 - [x] 7.2 Document the "API required for local dev" workflow in `apps/Globify` README / `CLAUDE.md`

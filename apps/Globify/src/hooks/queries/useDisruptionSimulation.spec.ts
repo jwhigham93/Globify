@@ -91,4 +91,13 @@ describe('useDisruptionSimulation', () => {
     expect(result.current.fetchStatus).toBe('idle');
     expect(mockedPost).not.toHaveBeenCalled();
   });
+
+  it('stays disabled and fires no request with an empty selection', () => {
+    const { result } = renderHook(() => useDisruptionSimulation([]), {
+      wrapper: makeWrapper(),
+    });
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockedPost).not.toHaveBeenCalled();
+  });
 });

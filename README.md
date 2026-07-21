@@ -63,49 +63,51 @@ Three CDK profiles selectable with `-c profile=<name>`:
 
 ## Quick Start
 
-### Mock data mode (no server needed)
-
-The fastest way to run Globify — uses built-in mock data, no database or API required:
+The backend is the **single source of truth** for all domain data — there is no
+offline/mock data path, so the API must be running before the app renders anything.
 
 ```sh
 make dev
-# or: pnpm nx serve Globify
 ```
 
-### Full-stack local mode
-
-Runs the Go API against a local PostgreSQL instance:
-
-```sh
-make fullstack
-```
-
-This starts PostgreSQL in Docker, runs migrations, seeds data, starts the API on `:8080`, and launches the Expo dev server.
+This starts PostgreSQL in Docker, runs migrations, seeds data, starts the API on
+`:8080`, and launches the Expo web dev server at **http://localhost:8081**.
 
 ```sh
-make stop   # stop everything, restore mock-data defaults
+make stop   # stop everything (DB + API)
 ```
 
 ### Individual targets
 
 | Command | Description |
 |---|---|
-| `make dev` | Globify with mock data (no server) |
-| `make api` | PostgreSQL + API only |
-| `make fullstack` | Everything together |
-| `make stop` | Stop all, restore config |
+| `make dev` | DB + API + Globify, end-to-end (`http://localhost:8081`) |
+| `make api` | PostgreSQL + API only, no frontend |
+| `make api-stop` | Stop PostgreSQL + API |
+| `make stop` | Stop everything |
 | `make test` | All tests (JS unit + Go) |
 | `make test-e2e` | Playwright E2E |
+
+Prefer to run pieces yourself instead of via `make`:
+
+```sh
+# 1. Postgres + API (from repo root)
+cd services/supply-chain-api && docker compose up
+
+# 2. Expo dev server, pointed at the local API (from repo root)
+EXPO_PUBLIC_API_BASE_URL=http://localhost:8080 pnpm nx serve Globify --web
+```
 
 ---
 
 ## Run Modes
 
-Controlled by `app.json` › `expo.extra`:
+Controlled by `EXPO_PUBLIC_API_BASE_URL` (env var, takes precedence) or `app.json`
+› `expo.extra.API_BASE_URL`. `COGNITO_*` extras gate auth independently — see
+[`apps/Globify/README.md`](apps/Globify/README.md).
 
 | Mode | `API_BASE_URL` | `COGNITO_*` | Behaviour |
 |---|---|---|---|
-| **Mock data** | _(empty)_ | _(empty)_ | Bundled TypeScript mock data. No network calls. |
 | **Local API** | `http://localhost:8080` | _(empty)_ | Local Go API. Auth bypassed. |
 | **Production** | `https://api.example.com` | _(set)_ | Deployed API. Cognito sign-in required. |
 
@@ -118,7 +120,7 @@ Controlled by `app.json` › `expo.extra`:
 | Node.js | 20+ |
 | pnpm | 9+ (`npm i -g pnpm`) |
 | Go | 1.26+ |
-| Docker | 24+ (full-stack mode only) |
+| Docker | 24+ (required — no mock data mode) |
 | golang-migrate | `go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest` |
 
 ---
