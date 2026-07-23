@@ -30,15 +30,25 @@ dev: set-api-url
 	@echo "Starting full stack..."
 	cd $(API_DIR) && $(MAKE) db-up
 	cd $(API_DIR) && $(MAKE) migrate-up
-	@echo "Starting API server in background..."
-	cd $(API_DIR) && DATABASE_URL="postgres://supplychain:supplychain_dev@localhost:5432/supplychain?sslmode=disable" \
-		go run ./cmd/server &
-	@echo "Waiting for API to be ready..."
-	@for i in 1 2 3 4 5 6 7 8 9 10; do \
-		curl -s http://localhost:8080/healthz > /dev/null 2>&1 && break; \
+	@echo "Starting API server in background (log: /tmp/globify-api.log)..."
+	@cd $(API_DIR) && DATABASE_URL="postgres://supplychain:supplychain_dev@localhost:5432/supplychain?sslmode=disable" \
+		go run ./cmd/server > /tmp/globify-api.log 2>&1 & echo $$! > /tmp/globify-api.pid
+	@echo "Waiting for API to be ready (up to 3min — first 'go run' compiles the binary)..."
+	@for i in $$(seq 1 180); do \
+		curl -s http://localhost:8080/healthz > /dev/null 2>&1 && echo "API ready." && break; \
+		if ! kill -0 "$$(cat /tmp/globify-api.pid)" 2>/dev/null; then \
+			echo "API process exited before becoming healthy. Log:"; \
+			cat /tmp/globify-api.log; \
+			exit 1; \
+		fi; \
+		if [ "$$i" = "180" ]; then \
+			echo "API did not become healthy within 3 minutes. Log:"; \
+			cat /tmp/globify-api.log; \
+			exit 1; \
+		fi; \
 		sleep 1; \
 	done
-	@echo "API ready — starting Globify at http://localhost:8081 ..."
+	@echo "Starting Globify at http://localhost:8081 ..."
 	npx nx serve Globify --web
 
 ## Alias for `make dev`
