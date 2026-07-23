@@ -2,7 +2,7 @@
  * Supply chain data aggregation and transformation utilities
  */
 
-import type { Location, SupplyRoute, ArcData, DataPoint, LocationType, SelectedEntity } from '../components/Globe/types';
+import type { Location, SupplyRoute, ArcData, DataPoint, LocationType } from '../components/Globe/types';
 import {
   SUPPLIER_TO_DC_COLOR,
   DC_TO_RESTAURANT_COLOR,
@@ -17,19 +17,6 @@ import {
   POINT_COLOR_DC,
   POINT_COLOR_RESTAURANT,
 } from '../components/Globe/constants';
-import { allLocations, distributionCenters, suppliers, restaurants } from './supplyChainLocations';
-import { allRoutes, supplierToDcRoutes, dcToRestaurantRoutes } from './supplyChainRoutes';
-
-// Re-export all data for convenience
-export {
-  allLocations,
-  distributionCenters,
-  suppliers,
-  restaurants,
-  allRoutes,
-  supplierToDcRoutes,
-  dcToRestaurantRoutes,
-};
 
 /**
  * Get the point radius for a location type
@@ -167,81 +154,4 @@ export function transformToDataPoints(locations: Location[]): DataPoint[] {
     value: loc.type === 'dc' ? 3 : loc.type === 'supplier' ? 2 : 1,
     locationType: loc.type,
   }));
-}
-
-/**
- * Get all supply chain data ready for visualization
- */
-export function getSupplyChainVisualizationData() {
-  return {
-    arcs: transformToArcs(allLocations, allRoutes),
-    points: transformToDataPoints(allLocations),
-    locations: allLocations,
-    routes: allRoutes,
-  };
-}
-
-// ── Entity lookup utilities ────────────────────────────────────────────────
-
-/** Location lookup by ID */
-export function getLocationById(id: string): Location | undefined {
-  return allLocations.find((l) => l.id === id);
-}
-
-/** All routes where the given location is the source */
-export function getOutboundRoutes(locationId: string): SupplyRoute[] {
-  return allRoutes.filter((r) => r.sourceId === locationId);
-}
-
-/** All routes where the given location is the destination */
-export function getInboundRoutes(locationId: string): SupplyRoute[] {
-  return allRoutes.filter((r) => r.destId === locationId);
-}
-
-/** Sum of route volumes */
-function sumVolume(routes: SupplyRoute[]): number {
-  return routes.reduce((sum, r) => sum + r.volume, 0);
-}
-
-/** Build a SelectedEntity for a given location, including connected route data */
-export function buildSelectedEntity(location: Location): SelectedEntity {
-  switch (location.type) {
-    case 'supplier': {
-      const outbound = getOutboundRoutes(location.id);
-      const dcIds = new Set(outbound.map((r) => r.destId));
-      return {
-        type: 'supplier',
-        location,
-        dcCount: dcIds.size,
-        outboundRoutes: outbound,
-        totalVolume: sumVolume(outbound),
-      };
-    }
-    case 'dc': {
-      const inbound = getInboundRoutes(location.id);
-      const outbound = getOutboundRoutes(location.id);
-      return {
-        type: 'dc',
-        location,
-        inboundRoutes: inbound,
-        outboundRoutes: outbound,
-        totalInboundVolume: sumVolume(inbound),
-        totalOutboundVolume: sumVolume(outbound),
-      };
-    }
-    case 'restaurant':
-    default: {
-      const inbound = getInboundRoutes(location.id);
-      const dcNames = inbound
-        .map((r) => getLocationById(r.sourceId)?.name)
-        .filter((n): n is string => !!n);
-      return {
-        type: 'restaurant',
-        location,
-        inboundRoutes: inbound,
-        totalInboundVolume: sumVolume(inbound),
-        servingDCs: [...new Set(dcNames)],
-      };
-    }
-  }
 }

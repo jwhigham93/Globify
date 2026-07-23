@@ -93,6 +93,27 @@ jest.mock('../../services/useVehiclePositions', () => ({
   useVehiclePositions: () => ({ positions: new Map(), connected: false }),
 }));
 
+// Mock the data-access hooks so the component renders without a QueryClient.
+jest.mock('../../hooks/queries/useSupplyChainData', () => ({
+  useSupplyChainData: () => ({
+    locations: [],
+    routes: [],
+    locationsById: new Map(),
+    outboundByLocationId: new Map(),
+    inboundByLocationId: new Map(),
+    isLoading: false,
+    isError: false,
+    error: null,
+    refetch: jest.fn(),
+  }),
+}));
+jest.mock('../../hooks/queries/useNetworkRisk', () => ({ useNetworkRisk: () => ({ data: undefined, isSuccess: false, isError: false }) }));
+jest.mock('../../hooks/queries/useDisruptionSimulation', () => ({
+  useDisruptionSimulation: () => ({ data: undefined, isSuccess: false, isError: false }),
+}));
+jest.mock('../../hooks/queries/useEntityDetail', () => ({ useEntityDetail: () => ({ data: undefined, isSuccess: false, isError: false }) }));
+jest.mock('../../hooks/queries/useVehicleRoute', () => ({ useVehicleRoute: () => ({ data: undefined, isSuccess: false, isError: false }) }));
+
 describe('GlobeVisualization Component', () => {
   describe('Rendering', () => {
     it('should render without crashing', () => {

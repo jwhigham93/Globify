@@ -12,15 +12,15 @@ import type {
   SelectedCluster,
 } from './types';
 
-// Mock supplyChainData to avoid pulling in real data
-jest.mock('../../services/supplyChainData', () => ({
-  getLocationById: jest.fn((id: string) => {
-    const locations: Record<string, { id: string; name: string; lat: number; lng: number; type: string }> = {
-      'dc-1': { id: 'dc-1', name: 'DC One', lat: 33, lng: -84, type: 'dc' },
-      'sup-1': { id: 'sup-1', name: 'Supplier One', lat: 40, lng: -90, type: 'supplier' },
-      'rest-1': { id: 'rest-1', name: 'Restaurant One', lat: 35, lng: -80, type: 'restaurant' },
-    };
-    return locations[id] ?? undefined;
+// Mock the topology query hook so the panel resolves names from a fixed index
+// without a QueryClient or network.
+jest.mock('../../hooks/queries/useSupplyChainData', () => ({
+  useSupplyChainData: () => ({
+    locationsById: new Map<string, { id: string; name: string; lat: number; lng: number; type: string }>([
+      ['dc-1', { id: 'dc-1', name: 'DC One', lat: 33, lng: -84, type: 'dc' }],
+      ['sup-1', { id: 'sup-1', name: 'Supplier One', lat: 40, lng: -90, type: 'supplier' }],
+      ['rest-1', { id: 'rest-1', name: 'Restaurant One', lat: 35, lng: -80, type: 'restaurant' }],
+    ]),
   }),
 }));
 

@@ -6,7 +6,7 @@
  * See: https://github.com/expo/expo/issues/30323
  */
 
-import React, { useState, useMemo, useCallback, useEffect, useRef, Suspense } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, Suspense } from 'react';
 import { View, Platform, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Canvas } from '@react-three/fiber';
 import type { GlobeVisualizationProps, ViewMode, DataPoint, SelectedEntity, NetworkRiskMetrics, DisruptionMetrics, RoutePathSegment } from './types';
@@ -22,17 +22,17 @@ import { DisruptionPanel } from './DisruptionPanel';
 import { EntityDetailPanel } from './EntityDetailPanel';
 import { TruckDetailPanel } from './TruckDetailPanel';
 import { TruckLayerToggle } from './TruckLayerToggle';
-import { computeNetworkRiskMetrics } from '../../services/concentrationRisk';
 import { applyRiskColorsToPoints, applyRiskColorsToArcs } from '../../services/riskVisuals';
-import { computeDisruptionMetrics } from '../../services/disruptionAnalysis';
 import { applyDisruptionToPoints, applyDisruptionToArcs } from '../../services/disruptionVisuals';
-import { allLocations, allRoutes, getLocationById, getInboundRoutes, buildSelectedEntity } from '../../services/supplyChainData';
 import { applySelectionToPoints, applySelectionToArcs, SELECTION_DIM_NODE_COLOR, SELECTION_DIM_ARC_COLOR, SELECTION_DIM_STROKE_MULTIPLIER } from '../../services/selectionHighlight';
 import { clusterByZoom, isClusterId, getClusterById, LOD_CLUSTER_CAMERA_THRESHOLD } from '../../services/lodClustering';
 import { config } from '../../services/config';
 import { useVehiclePositions } from '../../services/useVehiclePositions';
-import { getMockVehiclePositions, tickMockVehicles } from '../../services/mockVehicleData';
-import * as apiClient from '../../services/apiClient';
+import { useSupplyChainData } from '../../hooks/queries/useSupplyChainData';
+import { useNetworkRisk } from '../../hooks/queries/useNetworkRisk';
+import { useDisruptionSimulation } from '../../hooks/queries/useDisruptionSimulation';
+import { useEntityDetail } from '../../hooks/queries/useEntityDetail';
+import { useVehicleRoute } from '../../hooks/queries/useVehicleRoute';
 
 /**
  * Main GlobeVisualization component
@@ -47,11 +47,18 @@ const EMPTY_DISRUPTION: DisruptionMetrics = {
   partiallyServedRestaurants: [],
 };
 
+/** Empty network risk metrics used before the risk query resolves */
+const EMPTY_NETWORK_RISK: NetworkRiskMetrics = {
+  networkDiversificationScore: 0,
+  hhi: 0,
+  supplierRisks: [],
+  dcDiversification: [],
+  restaurantRisks: [],
+};
+
 export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   dataPoints = [],
   arcsData = [],
-  locations: propLocations,
-  routes: propRoutes,
   onPointClick,
   onReady,
   onError,
@@ -59,17 +66,18 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   backgroundColor = '#000000',
   testID = 'globe-visualization',
 }) => {
-  // Use prop data if provided (API mode), else fall back to local mock data
-  const locations = propLocations ?? allLocations;
-  const routes = propRoutes ?? allRoutes;
-  const useApi = !config.isDevMode;
+  // Topology (and derived lookup indexes) from the backend, shared via the query cache.
+  const { locations, locationsById, inboundByLocationId } = useSupplyChainData();
 
   const [error, setError] = useState<Error | null>(null);
   const [isTextureLoading, setIsTextureLoading] = useState(true);
   const [isStarsSpinning, setIsStarsSpinning] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('standard');
   const [disabledNodeIds, setDisabledNodeIds] = useState<Set<string>>(new Set());
+  // Client-built selections (cluster / route) live here; supplier/dc/restaurant
+  // selections are driven by selectedLocationId + the entity-detail query below.
   const [selectedEntity, setSelectedEntity] = useState<SelectedEntity | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [cameraDistance, setCameraDistance] = useState<number>(
     Math.round(Math.sqrt(CAMERA_POSITION[0] ** 2 + CAMERA_POSITION[1] ** 2 + CAMERA_POSITION[2] ** 2))
   );
@@ -78,78 +86,30 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   // ── Truck GPS layer ──────────────────────────────────────────────
   const [showTrucks, setShowTrucks] = useState(false);
   const [selectedTruckId, setSelectedTruckId] = useState<string | null>(null);
-  const wsUrl = useApi ? config.resolvedWsUrl : undefined;
-  const apiBaseUrl = useApi ? config.apiBaseUrl : undefined;
-  const { positions: livePositions } = useVehiclePositions(wsUrl, apiBaseUrl);
-  // In dev mode, use mock vehicles so the truck layer is visible without an API
-  const [mockPositions, setMockPositions] = useState<Map<string, import('../../services/useVehiclePositions').VehiclePosition>>(
-    getMockVehiclePositions,
+  const { positions: vehiclePositions } = useVehiclePositions(
+    config.resolvedWsUrl,
+    config.apiBaseUrl,
   );
-  const vehiclePositions = useApi ? livePositions : mockPositions;
-
-  // Animate mock trucks in dev mode
-  useEffect(() => {
-    if (useApi || !showTrucks) return;
-    const id = setInterval(() => {
-      setMockPositions(tickMockVehicles());
-    }, 800);
-    return () => clearInterval(id);
-  }, [useApi, showTrucks]);
 
   const selectedTruck = selectedTruckId
     ? vehiclePositions.get(selectedTruckId) ?? null
     : null;
 
   // ── Route polyline for selected truck ────────────────────────────
-  const [routeEndpoints, setRouteEndpoints] = useState<{
-    origin: { lat: number; lng: number };
-    destination: { lat: number; lng: number };
-  } | null>(null);
-
-  // Fetch route endpoints when truck selection changes
-  useEffect(() => {
-    if (!selectedTruckId) {
-      setRouteEndpoints(null);
-      return;
-    }
-
-    if (useApi) {
-      let cancelled = false;
-      apiClient.get<{
-        originLat: number; originLng: number;
-        destinationLat: number; destinationLng: number;
-      }>(`/vehicles/${selectedTruckId}/route`)
-        .then((route) => {
-          if (!cancelled) {
-            setRouteEndpoints({
-              origin: { lat: route.originLat, lng: route.originLng },
-              destination: { lat: route.destinationLat, lng: route.destinationLng },
-            });
+  const { data: vehicleRoute, isError: isRouteError } = useVehicleRoute(selectedTruckId);
+  const routeEndpoints = useMemo(
+    () =>
+      vehicleRoute
+        ? {
+            origin: { lat: vehicleRoute.originLat, lng: vehicleRoute.originLng },
+            destination: {
+              lat: vehicleRoute.destinationLat,
+              lng: vehicleRoute.destinationLng,
+            },
           }
-        })
-        .catch(() => {
-          if (!cancelled) setRouteEndpoints(null);
-        });
-      return () => { cancelled = true; };
-    }
-
-    // Dev mode: look up origin/destination by name from local data
-    const truck = vehiclePositions.get(selectedTruckId);
-    if (truck?.originName && truck?.destinationName) {
-      const origin = locations.find(l => l.name === truck.originName);
-      const dest = locations.find(l => l.name === truck.destinationName);
-      if (origin && dest) {
-        setRouteEndpoints({
-          origin: { lat: origin.lat, lng: origin.lng },
-          destination: { lat: dest.lat, lng: dest.lng },
-        });
-        return undefined;
-      }
-    }
-    setRouteEndpoints(null);
-    return undefined;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTruckId, useApi]);
+        : null,
+    [vehicleRoute],
+  );
 
   // Build route path segments from endpoints + truck position
   const routePathData: RoutePathSegment[] = useMemo(() => {
@@ -178,6 +138,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   const handleTruckClick = useCallback((vehicleId: string) => {
     setSelectedTruckId(vehicleId);
     setSelectedEntity(null); // close entity panel to avoid overlap
+    setSelectedLocationId(null);
   }, []);
 
   const handleCloseTruck = useCallback(() => {
@@ -210,60 +171,41 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   const isMobile = Platform.OS !== 'web';
 
   // ── Network Risk Metrics ─────────────────────────────────────────
-  const [networkRiskMetrics, setNetworkRiskMetrics] = useState<NetworkRiskMetrics>(
-    () => computeNetworkRiskMetrics(routes, locations)
-  );
+  const {
+    data: networkRiskMetrics = EMPTY_NETWORK_RISK,
+    isSuccess: isRiskSuccess,
+    isError: isRiskError,
+  } = useNetworkRisk();
 
-  useEffect(() => {
-    if (!useApi) {
-      setNetworkRiskMetrics(computeNetworkRiskMetrics(routes, locations));
-      return;
-    }
-    let cancelled = false;
-    apiClient.get<NetworkRiskMetrics>('/risk/network').then((metrics) => {
-      if (!cancelled) setNetworkRiskMetrics(metrics);
-    }).catch(() => {
-      // Fall back to local computation on error
-      if (!cancelled) setNetworkRiskMetrics(computeNetworkRiskMetrics(routes, locations));
-    });
-    return () => { cancelled = true; };
-  }, [useApi, routes, locations]);
+  // ── Disruption Metrics ───────────────────────────────────────────
+  // Keyed by the disabled-node set; React Query dedupes requests, so no manual
+  // debounce/cancellation is needed. No placeholder data: the panel is gated on
+  // isSuccess so a failed or in-flight simulation never renders as zero impact.
+  const disabledIdList = useMemo(() => Array.from(disabledNodeIds), [disabledNodeIds]);
+  const {
+    data: disruptionData,
+    isSuccess: isDisruptionSuccess,
+    isError: isDisruptionError,
+  } = useDisruptionSimulation(disabledIdList);
+  const disruptionMetrics =
+    disabledNodeIds.size === 0 ? EMPTY_DISRUPTION : disruptionData ?? EMPTY_DISRUPTION;
 
-  // ── Disruption Metrics (debounced) ───────────────────────────────
-  const [disruptionMetrics, setDisruptionMetrics] = useState<DisruptionMetrics>(EMPTY_DISRUPTION);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ── Entity detail for a clicked supplier/dc/restaurant ───────────
+  const { data: entityDetail, isError: isEntityError } = useEntityDetail(selectedLocationId);
+  // The active inspect-panel entity: a client-built cluster/route, else the
+  // fetched location detail.
+  const activeEntity: SelectedEntity | null = selectedEntity ?? entityDetail ?? null;
 
-  useEffect(() => {
-    if (disabledNodeIds.size === 0) {
-      setDisruptionMetrics(EMPTY_DISRUPTION);
-      return;
-    }
-
-    if (!useApi) {
-      setDisruptionMetrics(computeDisruptionMetrics(disabledNodeIds, routes, locations));
-      return;
-    }
-
-    // Debounce 300ms for rapid toggles
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    let cancelled = false;
-    debounceTimerRef.current = setTimeout(() => {
-      const disabledNodes = Array.from(disabledNodeIds).map((id) => {
-        const loc = locations.find((l) => l.id === id);
-        return { id, type: loc?.type ?? 'dc' };
-      });
-      apiClient.post<DisruptionMetrics>('/disruption/simulate', { disabledNodes }).then((metrics) => {
-        if (!cancelled) setDisruptionMetrics(metrics);
-      }).catch(() => {
-        if (!cancelled) setDisruptionMetrics(computeDisruptionMetrics(disabledNodeIds, routes, locations));
-      });
-    }, 300);
-
-    return () => {
-      cancelled = true;
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    };
-  }, [disabledNodeIds, useApi, routes, locations]);
+  // Backend query failures for the currently relevant data — surfaced as a
+  // banner rather than silently rendering empty/zeroed domain data.
+  const failedQueries = [
+    viewMode === 'concentration-risk' && isRiskError ? 'risk metrics' : null,
+    viewMode === 'disruption' && disabledNodeIds.size > 0 && isDisruptionError
+      ? 'disruption simulation'
+      : null,
+    selectedLocationId && isEntityError ? 'location details' : null,
+    selectedTruckId && isRouteError ? 'vehicle route' : null,
+  ].filter((label): label is string => !!label);
 
   // Set of orphaned restaurant IDs for visual highlighting
   const orphanedIds = useMemo(
@@ -319,16 +261,16 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
 
   // Final pass: spotlight the selected entity (or dim for truck isolation)
   const highlightedDataPoints = useMemo(() => {
-    if (selectedEntity) return applySelectionToPoints(effectiveDataPoints, selectedEntity);
+    if (activeEntity) return applySelectionToPoints(effectiveDataPoints, activeEntity);
     // When a truck is selected, dim all location points so the truck stands out
     if (selectedTruckId) {
       return effectiveDataPoints.map((p) => ({ ...p, color: SELECTION_DIM_NODE_COLOR }));
     }
     return effectiveDataPoints;
-  }, [effectiveDataPoints, selectedEntity, selectedTruckId]);
+  }, [effectiveDataPoints, activeEntity, selectedTruckId]);
 
   const highlightedArcsData = useMemo(() => {
-    if (selectedEntity) return applySelectionToArcs(effectiveArcsData, selectedEntity);
+    if (activeEntity) return applySelectionToArcs(effectiveArcsData, activeEntity);
     // When a truck is selected, dim all arcs so the truck stands out
     if (selectedTruckId) {
       return effectiveArcsData.map((a) => ({
@@ -338,7 +280,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
       }));
     }
     return effectiveArcsData;
-  }, [effectiveArcsData, selectedEntity, selectedTruckId]);
+  }, [effectiveArcsData, activeEntity, selectedTruckId]);
 
   // When a truck is selected, show only that truck (hide others)
   const isolatedVehiclePositions = useMemo(() => {
@@ -381,11 +323,8 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
     });
     // Close the inspect panel when switching modes
     setSelectedEntity(null);
+    setSelectedLocationId(null);
   };
-
-  // Track the latest entity selection to ignore stale API responses
-  const latestSelectionRef = useRef<string | null>(null);
-  const [entityLoading, setEntityLoading] = useState(false);
 
   // Toggle a node's disabled state (only suppliers and DCs) in disruption mode,
   // or open the inspect panel in other modes.
@@ -420,21 +359,22 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
       if (isClusterId(pointId)) {
         const cluster = getClusterById(pointId);
         if (cluster) {
+          setSelectedLocationId(null); // clear any location detail selection
           setSelectedEntity((prev) => {
             if (prev && prev.type !== 'route' && prev.location.id === pointId) return null;
 
             // Build rich cluster info with member names and serving DCs
             const memberNames = cluster.memberIds
-              .map((id) => getLocationById(id)?.name ?? id)
+              .map((id) => locationsById.get(id)?.name ?? id)
               .sort();
 
             const dcSet = new Set<string>();
             let totalVolume = 0;
             for (const memberId of cluster.memberIds) {
-              const memberRoutes = getInboundRoutes(memberId);
+              const memberRoutes = inboundByLocationId.get(memberId) ?? [];
               for (const r of memberRoutes) {
                 totalVolume += r.volume;
-                const dc = getLocationById(r.sourceId);
+                const dc = locationsById.get(r.sourceId);
                 if (dc) dcSet.add(dc.name);
               }
             }
@@ -459,43 +399,13 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
         return;
       }
 
-      // If same entity is already selected, close the panel
-      setSelectedEntity((prev) => {
-        if (prev && prev.type !== 'route' && prev.location.id === pointId) {
-          latestSelectionRef.current = null;
-          return null;
-        }
-        return prev; // Will be replaced by API/local result below
-      });
-
-      // Check if we just toggled off
-      latestSelectionRef.current = pointId;
-
-      if (!useApi) {
-        // Dev mode — use local data
-        const location = getLocationById(pointId);
-        if (location) {
-          setSelectedEntity(buildSelectedEntity(location));
-        }
-        return;
-      }
-
-      // API mode — fetch entity detail
-      setEntityLoading(true);
-      apiClient.get<SelectedEntity>(`/entities/${pointId}`).then((entity) => {
-        // Ignore stale responses
-        if (latestSelectionRef.current !== pointId) return;
-        setSelectedEntity(entity);
-      }).catch(() => {
-        // Fall back to local on error
-        if (latestSelectionRef.current !== pointId) return;
-        const location = getLocationById(pointId);
-        if (location) setSelectedEntity(buildSelectedEntity(location));
-      }).finally(() => {
-        if (latestSelectionRef.current === pointId) setEntityLoading(false);
-      });
+      // Location click (supplier/dc/restaurant): clear any cluster selection and
+      // toggle the location detail query. useEntityDetail(selectedLocationId)
+      // fetches and caches the detail; activeEntity surfaces it to the panel.
+      setSelectedEntity(null);
+      setSelectedLocationId((prev) => (prev === pointId ? null : pointId));
     },
-    [viewMode, useApi, locations]
+    [viewMode]
   );
 
   // Reset all disruption state
@@ -505,6 +415,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
 
   const handleCloseEntity = useCallback(() => {
     setSelectedEntity(null);
+    setSelectedLocationId(null);
     setSelectedTruckId(null);
   }, []);
 
@@ -512,6 +423,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   const handleZoomToExpand = useCallback(() => {
     setZoomTarget(LOD_CLUSTER_CAMERA_THRESHOLD - 5);
     setSelectedEntity(null);
+    setSelectedLocationId(null);
   }, []);
 
   // Clear zoom target when animation completes
@@ -663,20 +575,49 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
         />
         <ViewModeToggle viewMode={viewMode} onToggle={toggleViewMode} />
       </View>
-      {/* Risk summary panel */}
+      {/* Backend data failure banner */}
+      {failedQueries.length > 0 && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 16,
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              borderRadius: 20,
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              borderWidth: 1,
+              borderColor: 'rgba(255, 107, 107, 0.5)',
+            }}
+          >
+            <Text style={{ color: '#ff6b6b', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
+              Failed to load {failedQueries.join(', ')}
+            </Text>
+          </View>
+        </View>
+      )}
+      {/* Risk summary panel — only rendered from a successful query, so loading
+          and failure states never appear as zeroed metrics */}
       <RiskPanel
         metrics={networkRiskMetrics}
-        visible={viewMode === 'concentration-risk'}
+        visible={viewMode === 'concentration-risk' && isRiskSuccess}
       />
-      {/* Disruption impact panel */}
+      {/* Disruption impact panel — only rendered from a successful simulation */}
       <DisruptionPanel
         metrics={disruptionMetrics}
-        visible={viewMode === 'disruption' && disabledNodeIds.size > 0}
+        visible={viewMode === 'disruption' && disabledNodeIds.size > 0 && isDisruptionSuccess}
         onResetAll={handleResetAll}
       />
       {/* Entity detail inspect panel */}
       <EntityDetailPanel
-        entity={selectedEntity}
+        entity={activeEntity}
         onClose={handleCloseEntity}
         onZoomToExpand={handleZoomToExpand}
       />

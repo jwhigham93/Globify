@@ -26,11 +26,6 @@ export const config = {
   cognitoRegion: process.env.EXPO_PUBLIC_COGNITO_REGION || (extra.COGNITO_REGION as string) || 'us-east-1',
   cognitoDomain: process.env.EXPO_PUBLIC_COGNITO_DOMAIN || (extra.COGNITO_DOMAIN as string) || '',
 
-  /** Whether the app is running in dev mode (no API, mock data) */
-  get isDevMode(): boolean {
-    return !this.apiBaseUrl;
-  },
-
   /**
    * Whether Cognito auth is enabled. Requires the Hosted UI domain in addition
    * to the pool/client IDs: signInWithGoogle() builds the OAuth redirect from

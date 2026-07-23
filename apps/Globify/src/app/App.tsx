@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   SafeAreaView,
   StyleSheet,
@@ -9,19 +9,15 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { GlobeVisualization } from '../components/Globe/GlobeVisualization';
-import {
-  getSupplyChainVisualizationData,
-  transformToArcs,
-  transformToDataPoints,
-} from '../services/supplyChainData';
+import { transformToArcs, transformToDataPoints } from '../services/supplyChainData';
 import { DEFAULT_BACKGROUND_COLOR } from '../components/Globe';
-import { config } from '../services/config';
-import * as apiClient from '../services/apiClient';
 import { setTokenGetter } from '../services/apiClient';
+import { queryClient } from '../hooks/queries/queryClient';
+import { useSupplyChainData } from '../hooks/queries/useSupplyChainData';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { SignInScreen } from './SignInScreen';
-import type { Location, SupplyRoute } from '../components/Globe/types';
 
 declare global {
   interface Window { __hideLoadingShell?: () => void; }
@@ -29,7 +25,7 @@ declare global {
 
 /**
  * Inner app shell — uses auth context.
- * Loads data from API or falls back to local mock data in dev mode.
+ * Loads supply-chain topology from the backend via TanStack Query.
  */
 const AppContent = () => {
   const { isAuthenticated, isLoading: authLoading, token } = useAuth();
@@ -40,52 +36,16 @@ const AppContent = () => {
     }
   }, []);
 
-  const [data, setData] = useState<{ locations: Location[]; routes: SupplyRoute[] } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
   // Wire the token getter so apiClient can attach JWT headers
   useEffect(() => {
     setTokenGetter(() => token);
   }, [token]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (config.isDevMode) {
-        // Dev mode fallback — use local mock data
-        const viz = getSupplyChainVisualizationData();
-        setData({ locations: viz.locations, routes: viz.routes });
-      } else {
-        const result = await apiClient.get<{ locations: Location[]; routes: SupplyRoute[] }>(
-          '/supply-chain/visualization',
-        );
-        setData(result);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Fetch data once authenticated (or immediately in dev mode)
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchData();
-    }
-  }, [isAuthenticated, fetchData]);
+  const { locations, routes, isLoading, isError, error, refetch } = useSupplyChainData();
 
   // Transform data locally for visualization
-  const arcs = useMemo(
-    () => (data ? transformToArcs(data.locations, data.routes) : []),
-    [data],
-  );
-  const points = useMemo(
-    () => (data ? transformToDataPoints(data.locations) : []),
-    [data],
-  );
+  const arcs = useMemo(() => transformToArcs(locations, routes), [locations, routes]);
+  const points = useMemo(() => transformToDataPoints(locations), [locations]);
 
   // Show auth loading spinner
   if (authLoading) {
@@ -96,13 +56,13 @@ const AppContent = () => {
     );
   }
 
-  // Show sign-in screen when not authenticated (and not in dev mode)
+  // Show sign-in screen when auth is enabled and the user is not signed in
   if (!isAuthenticated) {
     return <SignInScreen />;
   }
 
   // Show data loading state
-  if (loading) {
+  if (isLoading) {
     return (
       <View style={[styles.centeredContainer, { backgroundColor: DEFAULT_BACKGROUND_COLOR }]}>
         <ActivityIndicator size="large" color="#ffffff" />
@@ -112,12 +72,12 @@ const AppContent = () => {
   }
 
   // Show error with retry
-  if (error) {
+  if (isError) {
     return (
       <View style={[styles.centeredContainer, { backgroundColor: DEFAULT_BACKGROUND_COLOR }]}>
         <Text style={styles.errorText}>Failed to load data</Text>
-        <Text style={styles.errorDetail}>{error.message}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchData} activeOpacity={0.7}>
+        <Text style={styles.errorDetail}>{error?.message ?? 'Unknown error'}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()} activeOpacity={0.7}>
           <Text style={styles.retryText}>Retry</Text>
         </TouchableOpacity>
       </View>
@@ -125,13 +85,7 @@ const AppContent = () => {
   }
 
   const globeContent = (
-    <GlobeVisualization
-      dataPoints={points}
-      arcsData={arcs}
-      locations={data?.locations}
-      routes={data?.routes}
-      testID="globe-visualization"
-    />
+    <GlobeVisualization dataPoints={points} arcsData={arcs} testID="globe-visualization" />
   );
 
   // On web, use a div container for proper iframe rendering
@@ -153,9 +107,11 @@ const AppContent = () => {
 };
 
 export const App = () => (
-  <AuthProvider>
-    <AppContent />
-  </AuthProvider>
+  <QueryClientProvider client={queryClient}>
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  </QueryClientProvider>
 );
 
 const styles = StyleSheet.create({

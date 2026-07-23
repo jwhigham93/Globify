@@ -85,6 +85,34 @@ jest.mock('../services/useVehiclePositions', () => ({
   useVehiclePositions: () => ({ positions: new Map(), connected: false }),
 }));
 
+// Mock the topology query so App renders the globe without hitting the backend.
+jest.mock('../hooks/queries/useSupplyChainData', () => {
+  const locations = [
+    { id: 'sup-1', name: 'Supplier One', lat: 40, lng: -90, type: 'supplier' },
+    { id: 'dc-1', name: 'DC One', lat: 33, lng: -84, type: 'dc' },
+  ];
+  const routes = [{ id: 'r1', sourceId: 'sup-1', destId: 'dc-1', volume: 100 }];
+  return {
+  useSupplyChainData: () => ({
+    locations,
+    routes,
+    locationsById: new Map(locations.map((l) => [l.id, l])),
+    outboundByLocationId: new Map([['sup-1', routes]]),
+    inboundByLocationId: new Map([['dc-1', routes]]),
+    isLoading: false,
+    isError: false,
+    error: null,
+    refetch: jest.fn(),
+  }),
+  };
+});
+jest.mock('../hooks/queries/useNetworkRisk', () => ({ useNetworkRisk: () => ({ data: undefined, isSuccess: false, isError: false }) }));
+jest.mock('../hooks/queries/useDisruptionSimulation', () => ({
+  useDisruptionSimulation: () => ({ data: undefined, isSuccess: false, isError: false }),
+}));
+jest.mock('../hooks/queries/useEntityDetail', () => ({ useEntityDetail: () => ({ data: undefined, isSuccess: false, isError: false }) }));
+jest.mock('../hooks/queries/useVehicleRoute', () => ({ useVehicleRoute: () => ({ data: undefined, isSuccess: false, isError: false }) }));
+
 describe('App Component', () => {
   it('should render GlobeVisualization component', () => {
     const { getByTestId } = render(<App />);

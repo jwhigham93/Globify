@@ -107,9 +107,19 @@ All three deployment profiles existed from the start of the CDK project rather t
 
 The globe is hand-built — Three.js, a custom GLSL tile shader — to learn what's actually happening under something like Mapbox, not to ship the fastest product. Having built it: real respect for what MapLibre GL is, a C++-to-WASM renderer with years of tiling, labeling, and zoom work already solved. Right call for learning; wrong call for a product that needs true progressive zoom at scale — that's a MapLibre migration, not a bigger shader.
 
-## Next up: moving to TanStack Query
+## Backend as the single source of truth
 
-There's a cleanup in flight that removes the `.catch(() => computeLocally(...))` pattern from about five call sites in the frontend — places where a failed API call silently recomputed risk or disruption data client-side instead of surfacing a real loading or error state. One of them hand-rolls a 300ms debounce around a `useEffect` for the risk/network queries. Once the local fallback is gone, those call sites need real query state — loading, error, retry — which today would mean writing that boilerplate by hand five separate times. TanStack Query replaces it with declarative caching, request dedup, and stale-while-revalidate, and it's fully Expo/React Native compatible, so it's landing as part of the same cleanup rather than a separate migration later.
+The frontend used to carry its own copy of the domain — a ~700-line hardcoded seed dataset, and TypeScript ports of the Go risk/disruption compute logic — as a `.catch(() => computeLocally(...))` fallback at about five call sites, plus a mock-vehicle path for demoing without a live API. That layer predated the backend: it was how the globe got built and iterated on before there was a Go service to talk to, and it stuck around as an offline/dev-mode convenience afterward.
+
+It came out for three reasons:
+
+- **Duplication was a correctness liability, not just dead weight.** The frontend and backend copies of the risk/disruption math could silently drift — and one already had: the disruption endpoint's request shape was `{ disabledIds }` on the backend but `{ disabledNodes }` in the frontend fallback, a mismatch the mock path had been quietly masking.
+- **A second, growing dataset baked into the client doesn't scale.** The seed data was small enough to hardcode when the demo had a couple hundred locations; it isn't the shape you want once real fleets, more suppliers, or higher-frequency GPS data are in play. Backend-only means the dataset can grow without a corresponding frontend rewrite.
+- **Loading/error state was being silently swallowed.** A failed request recomputing locally *looked* like success — no error surfaced, no retry, no way to tell the user data was stale. That's the wrong default for a supply-chain risk tool.
+
+The replacement is [TanStack Query](https://tanstack.com/query) (`apps/Globify/src/hooks/queries/`) as the sole data-fetching layer: declarative caching, request dedup, and real loading/error states in place of the hand-rolled 300ms debounce and manual fallback logic. The seed-dataset referential-integrity check that used to live in a frontend `.spec.ts` moved to a hermetic Go test (`services/supply-chain-api/internal/seed`) — the backend is now the only place that data exists, so that's the only place that needs to validate it.
+
+One consequence worth calling out for local dev: there is no offline/mock mode anymore. The API (`docker compose up` in `services/supply-chain-api/`) must be running for the app to render anything — see the root `README.md` Quick Start.
 
 ## Current state and what's next
 
@@ -121,7 +131,6 @@ Known, deliberately deferred items:
 - **`GPS_SIM_TOKEN` in the EventBridge rule's static event input** (`infra/cdk/stacks/lambda_api.go`) — readable by anyone with `events:DescribeRule` access to the account. Can't just be deleted: it's the only thing distinguishing a genuine EventBridge tick from a spoofed public HTTP call, since the Lambda Web Adapter routes both through the same code path. Real fix is fetching it from Secrets Manager at invoke time. Low urgency — blast radius today is fake GPS pings, not data access.
 - **Progressive globe textures** — `tileShader.ts` already composites up to 8 high-res tile overlays; the OpenSpec tracker for this feature undercounts progress relative to the code.
 - CI/CD and broader security hardening are both explicitly in progress.
-- Some duplication between the local/offline risk logic (TypeScript, unused fallback) and the live Go implementation — the TanStack Query cleanup above removes the last of it.
 
 ## Notable files
 

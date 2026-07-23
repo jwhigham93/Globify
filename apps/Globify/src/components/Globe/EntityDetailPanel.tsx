@@ -17,7 +17,7 @@ import type {
   SelectedRestaurant,
   SelectedCluster,
 } from './types';
-import { getLocationById } from '../../services/supplyChainData';
+import { useSupplyChainData } from '../../hooks/queries/useSupplyChainData';
 
 const NARROW_BREAKPOINT = 600;
 
@@ -31,6 +31,7 @@ export interface EntityDetailPanelProps {
 // ── Sub-panels ─────────────────────────────────────────────────────────────
 
 const SupplierDetail: React.FC<{ data: SelectedSupplier }> = ({ data }) => {
+  const { locationsById } = useSupplyChainData();
   return (
     <>
       <View style={s.metricsRow}>
@@ -44,7 +45,7 @@ const SupplierDetail: React.FC<{ data: SelectedSupplier }> = ({ data }) => {
 
       <Text style={s.sectionTitle}>Outbound Routes</Text>
       {data.outboundRoutes.map((route) => {
-        const dest = getLocationById(route.destId);
+        const dest = locationsById.get(route.destId);
         return (
           <View key={route.id} style={s.routeRow}>
             <Text style={s.routeArrow}>→</Text>
@@ -62,6 +63,7 @@ const SupplierDetail: React.FC<{ data: SelectedSupplier }> = ({ data }) => {
 };
 
 const DCDetail: React.FC<{ data: SelectedDC }> = ({ data }) => {
+  const { locationsById } = useSupplyChainData();
   return (
     <>
       <View style={s.metricsRow}>
@@ -81,7 +83,7 @@ const DCDetail: React.FC<{ data: SelectedDC }> = ({ data }) => {
 
       <Text style={s.sectionTitle}>Inbound (Suppliers)</Text>
       {data.inboundRoutes.map((route) => {
-        const src = getLocationById(route.sourceId);
+        const src = locationsById.get(route.sourceId);
         return (
           <View key={route.id} style={s.routeRow}>
             <Text style={s.routeArrowIn}>←</Text>
@@ -97,7 +99,7 @@ const DCDetail: React.FC<{ data: SelectedDC }> = ({ data }) => {
 
       <Text style={s.sectionTitle}>Outbound (Restaurants)</Text>
       {data.outboundRoutes.map((route) => {
-        const dest = getLocationById(route.destId);
+        const dest = locationsById.get(route.destId);
         return (
           <View key={route.id} style={s.routeRow}>
             <Text style={s.routeArrow}>→</Text>
@@ -115,6 +117,7 @@ const DCDetail: React.FC<{ data: SelectedDC }> = ({ data }) => {
 };
 
 const RestaurantDetail: React.FC<{ data: SelectedRestaurant }> = ({ data }) => {
+  const { locationsById } = useSupplyChainData();
   return (
     <>
       <View style={s.metricsRow}>
@@ -137,7 +140,7 @@ const RestaurantDetail: React.FC<{ data: SelectedRestaurant }> = ({ data }) => {
 
       <Text style={s.sectionTitle}>Inbound Routes</Text>
       {data.inboundRoutes.map((route) => {
-        const src = getLocationById(route.sourceId);
+        const src = locationsById.get(route.sourceId);
         return (
           <View key={route.id} style={s.routeRow}>
             <Text style={s.routeArrowIn}>←</Text>

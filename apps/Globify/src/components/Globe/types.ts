@@ -352,20 +352,6 @@ export interface GlobeVisualizationProps {
   arcsData?: ArcData[];
 
   /**
-   * Full location data from the API (passed through from App).
-   * Used for risk computation and entity lookups.
-   * Falls back to local mock data when not provided.
-   */
-  locations?: Location[];
-
-  /**
-   * Full route data from the API (passed through from App).
-   * Used for risk computation and entity lookups.
-   * Falls back to local mock data when not provided.
-   */
-  routes?: SupplyRoute[];
-
-  /**
    * Callback invoked when a data point is clicked/tapped.
    */
   onPointClick?: (point: DataPoint, index: number) => void;

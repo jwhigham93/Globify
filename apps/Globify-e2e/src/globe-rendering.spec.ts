@@ -4,6 +4,11 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { mockApi } from './support/mockApi';
+
+test.beforeEach(async ({ page }) => {
+  await mockApi(page);
+});
 
 test.describe('Globe Rendering', () => {
   test('should display globe on page load within 3 seconds', async ({ page }) => {
