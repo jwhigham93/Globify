@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
@@ -30,6 +31,10 @@ func main() {
 	if os.Getenv("LOG_FORMAT") != "json" {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	}
+
+	// ── Shutdown context ─────────────────────────────────────────────
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	// ── AWS config (shared by SSM + WebSocket hub) ───────────────────
 	awsCfg, awsCfgErr := awsconfig.LoadDefaultConfig(context.Background())
@@ -99,6 +104,11 @@ func main() {
 		gorillaHub = ws.NewHub()
 		go gorillaHub.Run()
 		log.Info().Msg("using local gorilla WebSocket hub")
+
+		// Local dev has no EventBridge tick to drive RunGPSSimulator, so run
+		// it on the same interval in-process — same function production uses,
+		// just a different trigger.
+		go runLocalGPSTicker(ctx, pool, gorillaHub)
 	}
 
 	// ── Router ───────────────────────────────────────────────────────
@@ -120,9 +130,6 @@ func main() {
 	}
 
 	// ── Graceful shutdown (Go 1.26: NotifyContext propagates cancel cause) ──
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
 	go func() {
 		log.Info().Str("addr", srv.Addr).Msg("starting server")
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -166,6 +173,25 @@ func readSSMParameter(ctx context.Context, cfg aws.Config, name string) (string,
 	}
 
 	return *out.Parameter.Value, nil
+}
+
+// runLocalGPSTicker drives api.RunGPSSimulator on the same 2-minute cadence
+// EventBridge uses in production, but in-process — local dev has no
+// EventBridge to send that tick, so without this every vehicle's last GPS
+// ping just ages past the 15-minute staleness threshold and shows "lost".
+func runLocalGPSTicker(ctx context.Context, pool *pgxpool.Pool, hub api.WSBroadcaster) {
+	ticker := time.NewTicker(2 * time.Minute)
+	defer ticker.Stop()
+
+	api.RunGPSSimulator(ctx, pool, hub)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			api.RunGPSSimulator(ctx, pool, hub)
+		}
+	}
 }
 
 func boolPtr(b bool) *bool { return &b }
