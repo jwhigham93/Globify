@@ -51,7 +51,7 @@ flowchart TB
     API -.->|verify JWT via JWKS| Cognito
 ```
 
-`ultra-lite` swaps App Runner for Lambda and RDS for Neon, and — because Lambda has no persistent process — swaps the WebSocket layer entirely. That swap is the more interesting story, below.
+`ultra-lite` swaps App Runner for Lambda and RDS for Neon, and — because Lambda has no persistent process — swaps the WebSocket layer entirely. Those swaps, and why the cheap tier can't just be the expensive one scaled down, are the more interesting story, below.
 
 ## Problems worth talking about
 
@@ -73,6 +73,8 @@ flowchart LR
 *(`services/supply-chain-api/cmd/server/main.go:84-102`)*
 
 The gorilla hub was the original, only implementation; DynamoDB came later, once `ultra-lite` was actually deployed and it turned out Function URLs don't support WS upgrades at all. One routing quirk found along the way: on Lambda, the Web Adapter delivers API Gateway WebSocket events to `POST /events`, not the `$connect` route the docs imply (`internal/api/websocket_apigw.go`).
+
+The obvious follow-up: now that the DynamoDB hub exists, why keep two — why not run the `ultra-lite` design on `lite` and `full` too and delete the gorilla path? Because the API Gateway + DynamoDB hub isn't a better hub, it's a *workaround for not having a process*, and on `lite`/`full` there is a process. The gorilla hub is an in-memory `map[*Client]bool` with a buffered broadcast channel (`internal/ws/hub.go`): a broadcast is a fan-out of in-process socket writes, no network, no AWS API, no per-message cost. The same broadcast on the DynamoDB hub is a `Scan` of the connection table plus one `PostToConnection` HTTPS call to API Gateway *per connected client* (`internal/wshub/hub.go`) — every message pays a DynamoDB read and N managed-API round-trips, and every connect/disconnect is a DynamoDB write. On a persistent server that's strictly worse on latency and cost, and it drags two managed services (an API Gateway WebSocket API, a DynamoDB table) plus their IAM into tiers whose entire premise is *not* paying for managed extras — the thing that keeps `lite` at ~$25/mo. So the split isn't redundant duplication; each hub is matched to its compute substrate. Persistent process → hold connections in memory. No process → externalize connection state, and eat the per-message cost because there's no alternative. Neither design can be the single universal one: gorilla can't run where there's no long-lived process to hold the map, and DynamoDB shouldn't run where there is.
 
 Both hubs sit behind the same client-facing handshake — a client can't open a raw WebSocket, it has to trade a valid access token for a short-lived ticket first, since browsers won't set an `Authorization` header on a WS upgrade request:
 
@@ -99,9 +101,17 @@ sequenceDiagram
 
 The ticket is single-use and hashed at rest (`internal/auth/ws_ticket.go`) specifically so the real access token never appears in a URL — the first version of this did put the raw token in `?token=`, which meant it landed in edge and access logs. That got replaced with the ticket exchange above as part of a broader auth-hardening pass (access-token validation instead of ID-token, a shared verifier for HTTP and WS, per-IP rate limiting).
 
+### Lambda and a normal database don't get along either
+
+Same root problem as the WebSocket one, one layer down. A conventional Postgres setup assumes a handful of long-lived connections: the API opens a pool once at startup — here, 10 (`internal/db/connection.go`) — and reuses them for every request. Lambda has no "once." Each concurrent request runs in its own isolated instance with its own pool, so a burst of 100 simultaneous requests tries to open roughly 100× the connections, and a small Postgres instance tops out at a few dozen. That's the classic Lambda-plus-RDS failure: `FATAL: too many connections`, arriving under exactly the load you were hoping to serve.
+
+RDS is the wrong fit on this tier for two further reasons. It's an always-on instance — you pay for it 24/7 whether or not anyone hits the API, which by itself busts the ~$1–3/mo `ultra-lite` budget. And it lives inside the VPC, so the Lambda would have to be VPC-attached to reach it, dragging in the NAT/egress cost described below plus extra cold-start latency. Neon (serverless Postgres) inverts all three: it scales compute to zero when idle so an untouched database costs almost nothing, it's reachable over the public internet with TLS so no VPC or NAT is needed, and it fronts a built-in connection pooler that multiplexes many client connections onto a few real Postgres ones — exactly the shape Lambda's fan-out needs. So `ultra-lite` isn't "RDS, but cheaper"; it's a different database posture, chosen because Lambda's execution model is fundamentally at odds with one always-on Postgres box. (The password still has to be kept out of the code — it's read from SSM Parameter Store at cold start, `cmd/server/main.go:46`.)
+
 ### Designing for cost as a first-class constraint
 
-All three deployment profiles existed from the start of the CDK project rather than one evolving into another (`infra/cdk/README.md` has the full per-profile cost breakdown — EKS's control plane alone is $73/mo). Treating "what does this cost to run" as a real constraint, not an afterthought, is what pushed the WebSocket architecture above into existing at all.
+All three deployment profiles existed from the start of the CDK project rather than one evolving into another — "what does this cost to run" was a design input, not an afterthought, and it's what drove both the WebSocket and database splits above.
+
+The most concrete small example is the NAT. Anything in a private subnet — the App Runner container, the RDS instance — still needs *outbound* internet access to pull images, fetch Cognito's signing keys, and call AWS APIs, and that egress has to route through a NAT (network address translation) so private resources can reach out without being reachable from outside. AWS's managed **NAT Gateway** is the default, and it's surprisingly pricey for a side project: ~$32/mo just to exist, plus a per-GB data-processing fee, before any real traffic. `full` uses it (`stacks/network.go`) because at that tier you want the managed, highly-available version. `lite` swaps in a **NAT instance** (`stacks/network_lite.go`) — a single t4g.nano EC2 box running the NAT yourself: a few dollars a month, no high availability, the right trade when the whole tier targets ~$25/mo. `ultra-lite` sidesteps the question entirely — no VPC, no NAT — because Lambda and Neon both live on the public internet behind TLS. (`infra/cdk/README.md` has the full per-profile breakdown; EKS's control plane alone is $73/mo.)
 
 ## On not reinventing MapLibre
 
