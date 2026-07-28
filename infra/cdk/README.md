@@ -18,7 +18,7 @@ Three profiles target different cost/capability tradeoffs:
 | **Monthly Cost** | ~$196 | ~$25 | ~$1-3 |
 | **Best For** | Production | Staging / demo | Side project / dev |
 
-Default profile is **lite** (set in `cdk.json`). Override with:
+Default profile is **ultra-lite** (set in `cdk.json`). Override with:
 
 ```sh
 cdk deploy --all -c profile=full        # production
@@ -74,7 +74,7 @@ cdk deploy --all -c profile=ultra-lite  # side project
 
 ```
 ┌───────────────────────────────┐
-│  Lambda (ARM64, 256 MB)       │
+│  Lambda (x86_64, 256 MB)      │
 │  ┌─────────────────────────┐  │
 │  │ Lambda Web Adapter      │  │
 │  │ → Go HTTP server        │  │
@@ -119,6 +119,44 @@ cdk deploy --all -c profile=ultra-lite  # side project
 | Helm | 3+ | [helm.sh/docs/intro/install](https://helm.sh/docs/intro/install/) | Full only |
 
 You also need an AWS account with appropriate IAM permissions. For ultra-lite, you additionally need a [Neon](https://neon.tech) account (free tier).
+
+### Before any local `cdk` command
+
+`main.go` constructs **every** stack on each synth, regardless of which one you
+name. `LambdaApiStack` calls `Code_FromAsset` on a zip that only CI builds, so
+`cdk synth`, `cdk diff`, and even `cdk deploy SomeUnrelatedStack` all panic with
+`Cannot find asset at services/supply-chain-api/dist/lambda.zip` until you build
+it. Two guards fire the same way — `GPS_SIM_TOKEN` must be set, and the Cognito
+context values are required unless you pass `-c allowInsecureAuth=true`.
+
+```sh
+# 1. Build the Lambda asset (from the repo root)
+cd services/supply-chain-api
+mkdir -p dist/pkg && cp -r migrations dist/pkg/
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+  go build -ldflags="-s -w" -o dist/pkg/bootstrap ./cmd/server
+python3 -c "
+import zipfile, os
+with zipfile.ZipFile('dist/lambda.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
+    zf.write('dist/pkg/bootstrap', 'bootstrap')
+    for root, _, files in os.walk('dist/pkg/migrations'):
+        for f in files:
+            p = os.path.join(root, f)
+            zf.write(p, p.replace('dist/pkg/', '', 1))
+"
+
+# 2. Synth or deploy, with the required env var and context
+cd ../../infra/cdk
+export GPS_SIM_TOKEN='<openssl rand -hex 32>'
+npx aws-cdk@2.1129.0 synth \
+  -c profile=ultra-lite \
+  -c cognitoUserPoolId=us-east-1_FzLm2rd4F \
+  -c cognitoClientId=8oqh7olvq83qc6miu6osnmfs6
+```
+
+Pin the CDK CLI to the version in `.github/workflows/deploy.yml` so your laptop
+and CI synth identically. Routine deploys happen through that workflow on merge
+to `main` — running `cdk deploy` by hand is for bootstrap and debugging only.
 
 > **Security note:** The deployment commands below use `Read-Host` or variable interpolation to keep passwords and connection strings out of shell history. Never paste secrets directly as CLI arguments — they end up in `~\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt` (PowerShell) or `~/.bash_history` (Bash) and are visible to any process inspecting running commands.
 

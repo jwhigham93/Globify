@@ -96,6 +96,12 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 		Layers:       &[]awslambda.ILayerVersion{lwaLayer},
 		MemorySize:   jsii.Number(256),
 		Timeout:      awscdk.Duration_Seconds(jsii.Number(30)),
+		// Each Lambda instance opens its own pgx pool (MaxConns=10 in
+		// internal/db/connection.go), so concurrency is the real bound on
+		// database connections: 20 × 10 = 200. Left unset, Lambda scales to the
+		// account's unreserved limit (1000 by default) and would try to open
+		// ~10k. Also caps worst-case spend against the $10/mo budget. Free.
+		ReservedConcurrentExecutions: jsii.Number(20),
 		Environment: &map[string]*string{
 			"AWS_LWA_PORT":         jsii.String("8080"),
 			"PORT":                 jsii.String("8080"),
