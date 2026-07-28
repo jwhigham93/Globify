@@ -22,8 +22,8 @@ Default profile is **ultra-lite** (set in `cdk.json`). Override with:
 
 ```sh
 cdk deploy --all -c profile=full        # production
-cdk deploy --all -c profile=lite        # staging (default)
-cdk deploy --all -c profile=ultra-lite  # side project
+cdk deploy --all -c profile=lite        # staging
+cdk deploy --all -c profile=ultra-lite  # side project (default)
 ```
 
 ## Architecture
@@ -120,14 +120,24 @@ cdk deploy --all -c profile=ultra-lite  # side project
 
 You also need an AWS account with appropriate IAM permissions. For ultra-lite, you additionally need a [Neon](https://neon.tech) account (free tier).
 
-### Before any local `cdk` command
+### Before any local `cdk` command on the ultra-lite profile
 
-`main.go` constructs **every** stack on each synth, regardless of which one you
-name. `LambdaApiStack` calls `Code_FromAsset` on a zip that only CI builds, so
-`cdk synth`, `cdk diff`, and even `cdk deploy SomeUnrelatedStack` all panic with
-`Cannot find asset at services/supply-chain-api/dist/lambda.zip` until you build
-it. Two guards fire the same way — `GPS_SIM_TOKEN` must be set, and the Cognito
-context values are required unless you pass `-c allowInsecureAuth=true`.
+`main.go` constructs every stack belonging to the selected profile on each
+synth, whichever single stack you name on the command line. **Ultra-lite is the
+default** (`cdk.json`), and it is the only profile that builds `LambdaApiStack`
+— so with no `-c profile=…` flag, the requirements below always apply:
+
+- **`dist/lambda.zip` must exist.** `LambdaApiStack` calls `Code_FromAsset` on a
+  zip that only CI builds, so `cdk synth`, `cdk diff`, and even
+  `cdk deploy SomeUnrelatedStack` panic with
+  `Cannot find asset at services/supply-chain-api/dist/lambda.zip`.
+- **`GPS_SIM_TOKEN` must be non-empty** — an empty token makes the simulator's
+  check pass for any caller, so the stack refuses to synth without it.
+- **Cognito context values are required** unless you pass
+  `-c allowInsecureAuth=true`; empty values would deploy with auth disabled.
+
+None of the three apply to `-c profile=full` or `-c profile=lite`, which build
+`ClusterStack` / `AppRunnerStack` instead and never touch the Lambda asset.
 
 ```sh
 # 1. Build the Lambda asset (from the repo root)
@@ -147,7 +157,9 @@ with zipfile.ZipFile('dist/lambda.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
 
 # 2. Synth or deploy, with the required env var and context
 cd ../../infra/cdk
-export GPS_SIM_TOKEN='<openssl rand -hex 32>'
+# A throwaway token is fine for synth/diff. For a local *deploy*, use the same
+# value as the GPS_SIM_TOKEN GitHub secret so CI doesn't flip it back next run.
+export GPS_SIM_TOKEN="$(openssl rand -hex 32)"
 npx aws-cdk@2.1129.0 synth \
   -c profile=ultra-lite \
   -c cognitoUserPoolId=us-east-1_FzLm2rd4F \

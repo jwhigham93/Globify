@@ -79,19 +79,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: supply_chain_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
+    # No Postgres service container: every current test is a pure unit test.
+    # Nothing under services/supply-chain-api references DATABASE_URL, pgxpool,
+    # or ConnectPool, and there is no TestMain — `go test ./...` passes with no
+    # database reachable. Add a service container (and a migrate step) at the
+    # point a test actually opens a connection.
     steps:
       - uses: actions/checkout@v4
         with:
@@ -104,8 +96,6 @@ jobs:
 
       - name: go test
         working-directory: services/supply-chain-api
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/supply_chain_test?sslmode=disable
         run: go test ./...
 
   # ── Infra (CDK) ───────────────────────────────────────────────────────────
@@ -172,6 +162,13 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           SECRET_NAME="globify/google-oauth-client-secret"
+          # Without this guard, a missing/empty secret means put-secret-value
+          # overwrites the working OAuth secret with "". The CFN dynamic
+          # reference then resolves to empty and Google sign-in breaks silently.
+          if [ -z "$GOOGLE_CLIENT_SECRET" ]; then
+            echo "::error::GOOGLE_CLIENT_SECRET is empty; refusing to overwrite $SECRET_NAME"
+            exit 1
+          fi
           if aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region us-east-1 >/dev/null 2>&1; then
             aws secretsmanager put-secret-value --secret-id "$SECRET_NAME" \
               --secret-string "$GOOGLE_CLIENT_SECRET" --region us-east-1
@@ -268,13 +265,27 @@ jobs:
         env:
           API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
         run: |
+          # Empty API_BASE_URL would otherwise degrade into five requests to the
+          # relative path "/healthz" and a misleading failure message.
+          if [ -z "$API_BASE_URL" ]; then
+            echo "::error::EXPO_PUBLIC_API_BASE_URL is not set"
+            exit 1
+          fi
           for attempt in 1 2 3 4 5; do
-            code=$(curl -sS -o /tmp/body -w '%{http_code}' "${API_BASE_URL%/}/healthz" || echo 000)
+            # Timeouts matter: a blackholed endpoint would otherwise hang this
+            # job until the runner limit instead of failing the deploy.
+            # `) || code=000` rather than `|| echo 000` inside the subshell —
+            # the latter appends to curl's own %{http_code} and logs "000 000".
+            code=$(curl -sS --connect-timeout 5 --max-time 15 \
+              -o /tmp/body -w '%{http_code}' "${API_BASE_URL%/}/healthz") || code=000
             if [ "$code" = "200" ]; then
               echo "healthz OK"; cat /tmp/body; exit 0
             fi
             echo "attempt $attempt: HTTP $code"; cat /tmp/body || true
-            sleep 10
+            # An `if` rather than `[ … ] && sleep 10`: the latter returns 1 on the
+            # last iteration, which under `bash -e` aborts the step before the
+            # error annotation below ever prints.
+            if [ "$attempt" -lt 5 ]; then sleep 10; fi
           done
           echo "::error::API healthz never returned 200 after deploy"
           exit 1
