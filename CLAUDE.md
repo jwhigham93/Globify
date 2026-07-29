@@ -101,7 +101,17 @@ Three deployment profiles selectable with `-c profile=<name>`:
 ## Testing approach
 
 - Unit tests: Jest (frontend), `go test` (backend)
-- No mocking of the database in Go tests — integration tests hit a real Postgres instance via Docker Compose
+- **The Go suite currently needs no database.** Every test under
+  `services/supply-chain-api` is a pure unit test — nothing references
+  `DATABASE_URL`, `pgxpool`, or `ConnectPool`, and there is no `TestMain`, so
+  `go test ./...` passes with no Postgres reachable. CI runs it without a service
+  container for that reason. There is no DB integration coverage today; query
+  code (`internal/db`, sqlc output) is exercised only at runtime.
+- If you add a test that opens a connection: don't mock the database — use a real
+  Postgres via Docker Compose (`services/supply-chain-api/docker-compose.yml`),
+  and add both a service container and a `migrations/` apply step to the
+  `go-test` job in `.github/workflows/deploy.yml`. An empty database is not
+  enough; the schema lives in migrations, not in test fixtures.
 - Playwright E2E in `apps/Globify-e2e/` cover globe rendering, view-mode cycling, UI overlays, runtime stability
 
 ## Environment

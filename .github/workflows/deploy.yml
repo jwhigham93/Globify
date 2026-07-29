@@ -18,72 +18,72 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ── Frontend ──────────────────────────────────────────────────────────────
-  deploy-frontend:
-    name: Deploy Frontend (Globify Web)
+  # ── What changed? ─────────────────────────────────────────────────────────
+  # The old string-matching on github.event.commits.*.modified silently
+  # deployed nothing when the push payload had no commits array (merge commits,
+  # >20-commit pushes, re-runs). A real path diff is deterministic.
+  changes:
+    name: Detect changed paths
     runs-on: ubuntu-latest
-    environment: production
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      contains(toJson(github.event.commits.*.modified), 'apps/Globify') ||
-      contains(toJson(github.event.commits.*.added), 'apps/Globify')
-
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      infra: ${{ steps.filter.outputs.infra }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
         with:
-          version: 9
+          filters: |
+            frontend:
+              - 'apps/Globify/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'babel.config.json'
+            backend:
+              - 'services/supply-chain-api/**'
+            # Deliberately NOT services/**: a backend-only change takes the fast
+            # update-function-code path below. Adding it here would make
+            # deploy-infra always win and leave deploy-backend unreachable.
+            infra:
+              - 'infra/cdk/**'
+
+  # ── Gate ──────────────────────────────────────────────────────────────────
+  # Nothing reaches AWS until the JS suite is green. e2e is deliberately left to
+  # ci.yml — it needs Playwright browsers and roughly doubles the wall clock.
+  verify:
+    name: Verify (lint · test · typecheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          filter: tree:0
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm nx run-many -t lint test typecheck
 
-      - name: Export web bundle
-        env:
-          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
-          EXPO_PUBLIC_COGNITO_USER_POOL_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_USER_POOL_ID }}
-          EXPO_PUBLIC_COGNITO_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_CLIENT_ID }}
-          EXPO_PUBLIC_COGNITO_REGION: ${{ secrets.EXPO_PUBLIC_COGNITO_REGION }}
-          EXPO_PUBLIC_WS_URL: ${{ secrets.EXPO_PUBLIC_WS_URL }}
-          EXPO_PUBLIC_COGNITO_DOMAIN: ${{ secrets.EXPO_PUBLIC_COGNITO_DOMAIN }}
-        run: pnpm nx export Globify -- --platform web
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - name: Sync to S3
-        env:
-          WEB_BUCKET_NAME: ${{ secrets.WEB_BUCKET_NAME }}
-        run: aws s3 sync apps/Globify/dist "s3://$WEB_BUCKET_NAME" --delete
-
-      - name: Invalidate CloudFront
-        env:
-          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
-            --paths '/*'
-
-  # ── Backend ───────────────────────────────────────────────────────────────
-  deploy-backend:
-    name: Deploy Backend (Lambda)
+  go-test:
+    name: Verify (go test)
     runs-on: ubuntu-latest
-    environment: production
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      contains(toJson(github.event.commits.*.modified), 'services/supply-chain-api') ||
-      contains(toJson(github.event.commits.*.added), 'services/supply-chain-api')
-
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+    # No Postgres service container: every current test is a pure unit test.
+    # Nothing under services/supply-chain-api references DATABASE_URL, pgxpool,
+    # or ConnectPool, and there is no TestMain — `go test ./...` passes with no
+    # database reachable. Add a service container (and a migrate step) at the
+    # point a test actually opens a connection.
     steps:
       - uses: actions/checkout@v4
         with:
@@ -94,53 +94,24 @@ jobs:
           go-version: '1.26'
           cache-dependency-path: services/supply-chain-api/go.sum
 
-      - name: Build Lambda zip
+      - name: go test
         working-directory: services/supply-chain-api
-        run: |
-          mkdir -p dist/pkg
-          cp -r migrations dist/pkg/
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go build -ldflags="-s -w" -o dist/pkg/bootstrap ./cmd/server
-          python3 -c "
-          import zipfile, os
-          with zipfile.ZipFile('dist/lambda.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
-              zf.write('dist/pkg/bootstrap', 'bootstrap')
-              for root, dirs, files in os.walk('dist/pkg/migrations'):
-                  for file in files:
-                      path = os.path.join(root, file)
-                      arc = path.replace('dist/pkg/', '', 1)
-                      zf.write(path, arc)
-          print('zip size:', os.path.getsize('dist/lambda.zip'), 'bytes')
-          "
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - name: Update Lambda function code
-        run: |
-          aws lambda update-function-code \
-            --function-name supply-chain-api \
-            --zip-file fileb://services/supply-chain-api/dist/lambda.zip \
-            --region us-east-1
-
-      - name: Wait for update to complete
-        run: |
-          aws lambda wait function-updated \
-            --function-name supply-chain-api \
-            --region us-east-1
+        run: go test ./...
 
   # ── Infra (CDK) ───────────────────────────────────────────────────────────
+  # Runs FIRST. cdk deploy publishes the Lambda zip as a CDK asset and updates
+  # the function; letting deploy-backend's update-function-code run at the same
+  # time produced ResourceConflictException races.
   deploy-infra:
     name: Deploy Infrastructure (CDK)
     runs-on: ubuntu-latest
     environment: production
+    needs: [changes, verify, go-test]
+    # go-test is skipped when the backend didn't change; !failure() lets that
+    # skip through while still blocking on an actual test failure.
     if: |
-      github.event_name == 'workflow_dispatch' ||
-      contains(toJson(github.event.commits.*.modified), 'infra/cdk') ||
-      contains(toJson(github.event.commits.*.added), 'infra/cdk')
+      !failure() && !cancelled() &&
+      (needs.changes.outputs.infra == 'true' || github.event_name == 'workflow_dispatch')
 
     steps:
       - uses: actions/checkout@v4
@@ -191,6 +162,13 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           SECRET_NAME="globify/google-oauth-client-secret"
+          # Without this guard, a missing/empty secret means put-secret-value
+          # overwrites the working OAuth secret with "". The CFN dynamic
+          # reference then resolves to empty and Google sign-in breaks silently.
+          if [ -z "$GOOGLE_CLIENT_SECRET" ]; then
+            echo "::error::GOOGLE_CLIENT_SECRET is empty; refusing to overwrite $SECRET_NAME"
+            exit 1
+          fi
           if aws secretsmanager describe-secret --secret-id "$SECRET_NAME" --region us-east-1 >/dev/null 2>&1; then
             aws secretsmanager put-secret-value --secret-id "$SECRET_NAME" \
               --secret-string "$GOOGLE_CLIENT_SECRET" --region us-east-1
@@ -209,3 +187,175 @@ jobs:
           cdk deploy --all -c profile=ultra-lite --require-approval never \
             -c cognitoUserPoolId="$CDK_COGNITO_USER_POOL_ID" \
             -c cognitoClientId="$CDK_COGNITO_CLIENT_ID"
+
+  # ── Backend ───────────────────────────────────────────────────────────────
+  # Only needed when infra itself is unchanged — otherwise cdk deploy above has
+  # already shipped this exact binary as its asset.
+  deploy-backend:
+    name: Deploy Backend (Lambda)
+    runs-on: ubuntu-latest
+    environment: production
+    needs: [changes, verify, go-test, deploy-infra]
+    if: |
+      !failure() && !cancelled() &&
+      needs.changes.outputs.backend == 'true' &&
+      needs.deploy-infra.result == 'skipped'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: services/supply-chain-api/go.sum
+
+      - name: Build Lambda zip
+        working-directory: services/supply-chain-api
+        run: |
+          mkdir -p dist/pkg
+          cp -r migrations dist/pkg/
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -ldflags="-s -w" -o dist/pkg/bootstrap ./cmd/server
+          python3 -c "
+          import zipfile, os
+          with zipfile.ZipFile('dist/lambda.zip', 'w', zipfile.ZIP_DEFLATED) as zf:
+              zf.write('dist/pkg/bootstrap', 'bootstrap')
+              for root, dirs, files in os.walk('dist/pkg/migrations'):
+                  for file in files:
+                      path = os.path.join(root, file)
+                      arc = path.replace('dist/pkg/', '', 1)
+                      zf.write(path, arc)
+          print('zip size:', os.path.getsize('dist/lambda.zip'), 'bytes')
+          "
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Update Lambda function code
+        run: |
+          aws lambda update-function-code \
+            --function-name supply-chain-api \
+            --zip-file fileb://services/supply-chain-api/dist/lambda.zip \
+            --region us-east-1
+
+      - name: Wait for update to complete
+        run: |
+          aws lambda wait function-updated \
+            --function-name supply-chain-api \
+            --region us-east-1
+
+  # ── API smoke test ────────────────────────────────────────────────────────
+  # A green cdk deploy only proves CloudFormation converged, not that the Go
+  # binary boots — a bad SSM/Cognito env var surfaces as a 5xx on first invoke.
+  smoke-api:
+    name: Smoke test API
+    runs-on: ubuntu-latest
+    environment: production
+    needs: [deploy-infra, deploy-backend]
+    if: |
+      !failure() && !cancelled() &&
+      (needs.deploy-infra.result == 'success' || needs.deploy-backend.result == 'success')
+    steps:
+      - name: GET /healthz
+        env:
+          API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+        run: |
+          # Empty API_BASE_URL would otherwise degrade into five requests to the
+          # relative path "/healthz" and a misleading failure message.
+          if [ -z "$API_BASE_URL" ]; then
+            echo "::error::EXPO_PUBLIC_API_BASE_URL is not set"
+            exit 1
+          fi
+          for attempt in 1 2 3 4 5; do
+            # Timeouts matter: a blackholed endpoint would otherwise hang this
+            # job until the runner limit instead of failing the deploy.
+            # `) || code=000` rather than `|| echo 000` inside the subshell —
+            # the latter appends to curl's own %{http_code} and logs "000 000".
+            code=$(curl -sS --connect-timeout 5 --max-time 15 \
+              -o /tmp/body -w '%{http_code}' "${API_BASE_URL%/}/healthz") || code=000
+            if [ "$code" = "200" ]; then
+              echo "healthz OK"; cat /tmp/body; exit 0
+            fi
+            echo "attempt $attempt: HTTP $code"; cat /tmp/body || true
+            # An `if` rather than `[ … ] && sleep 10`: the latter returns 1 on the
+            # last iteration, which under `bash -e` aborts the step before the
+            # error annotation below ever prints.
+            if [ "$attempt" -lt 5 ]; then sleep 10; fi
+          done
+          echo "::error::API healthz never returned 200 after deploy"
+          exit 1
+
+  # ── Frontend ──────────────────────────────────────────────────────────────
+  # Last, so the shipped bundle never talks to an API that hasn't rolled yet.
+  deploy-frontend:
+    name: Deploy Frontend (Globify Web)
+    runs-on: ubuntu-latest
+    environment: production
+    needs: [changes, verify, deploy-infra, deploy-backend, smoke-api]
+    if: |
+      !failure() && !cancelled() &&
+      (needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch')
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Export web bundle
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+          EXPO_PUBLIC_COGNITO_USER_POOL_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_USER_POOL_ID }}
+          EXPO_PUBLIC_COGNITO_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_COGNITO_CLIENT_ID }}
+          EXPO_PUBLIC_COGNITO_REGION: ${{ secrets.EXPO_PUBLIC_COGNITO_REGION }}
+          EXPO_PUBLIC_WS_URL: ${{ secrets.EXPO_PUBLIC_WS_URL }}
+          EXPO_PUBLIC_COGNITO_DOMAIN: ${{ secrets.EXPO_PUBLIC_COGNITO_DOMAIN }}
+        run: pnpm nx export Globify -- --platform web
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # Two passes: content-hashed bundles go up first with a long TTL, then the
+      # HTML that points at them with no-cache. Uploading in the other order
+      # leaves a window where index.html references assets that aren't there.
+      - name: Sync hashed assets to S3
+        env:
+          WEB_BUCKET_NAME: ${{ secrets.WEB_BUCKET_NAME }}
+        run: |
+          aws s3 sync apps/Globify/dist "s3://$WEB_BUCKET_NAME" \
+            --exclude '*.html' \
+            --cache-control 'public,max-age=31536000,immutable'
+
+      - name: Sync HTML to S3
+        env:
+          WEB_BUCKET_NAME: ${{ secrets.WEB_BUCKET_NAME }}
+        run: |
+          aws s3 sync apps/Globify/dist "s3://$WEB_BUCKET_NAME" \
+            --delete \
+            --exclude '*' --include '*.html' \
+            --cache-control 'no-cache'
+
+      - name: Invalidate CloudFront
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --paths '/*'
