@@ -178,6 +178,9 @@ jobs:
           fi
 
       - name: CDK deploy
+        # cdk.json (which supplies --app) lives here, and the Lambda asset path
+        # in stacks/lambda_api.go is relative to this directory.
+        working-directory: infra/cdk
         env:
           GPS_SIM_TOKEN: ${{ secrets.GPS_SIM_TOKEN }}
           BUDGET_ALERT_EMAIL: ${{ secrets.BUDGET_ALERT_EMAIL }}
