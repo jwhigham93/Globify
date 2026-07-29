@@ -96,12 +96,18 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 		Layers:       &[]awslambda.ILayerVersion{lwaLayer},
 		MemorySize:   jsii.Number(256),
 		Timeout:      awscdk.Duration_Seconds(jsii.Number(30)),
-		// Each Lambda instance opens its own pgx pool (MaxConns=10 in
-		// internal/db/connection.go), so concurrency is the real bound on
-		// database connections: 20 × 10 = 200. Left unset, Lambda scales to the
-		// account's unreserved limit (1000 by default) and would try to open
-		// ~10k. Also caps worst-case spend against the $10/mo budget. Free.
-		ReservedConcurrentExecutions: jsii.Number(20),
+		// No ReservedConcurrentExecutions on purpose. Each instance opens its own
+		// pgx pool (MaxConns=10 in internal/db/connection.go), so concurrency is
+		// what bounds database connections — but AWS refuses any reservation that
+		// would drop account-wide unreserved concurrency below 10, and this
+		// account's total limit is at or near that floor. Reserving 20 failed with
+		// InvalidRequest and rolled the stack back.
+		//
+		// The account quota already provides the ceiling this was meant to add:
+		// the function cannot scale past it, so connections stay bounded at
+		// limit × 10. Revisit only if the quota is raised — a reservation needs
+		// account_limit ≥ reserved + 10. Check with:
+		//   aws lambda get-account-settings --query 'AccountLimit.ConcurrentExecutions'
 		Environment: &map[string]*string{
 			"AWS_LWA_PORT":         jsii.String("8080"),
 			"PORT":                 jsii.String("8080"),
