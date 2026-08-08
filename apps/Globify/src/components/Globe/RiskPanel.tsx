@@ -71,7 +71,7 @@ const RiskBar: React.FC<{ score: number; maxScore?: number }> = ({
   );
 };
 
-export const RiskPanel: React.FC<RiskPanelProps> = ({ metrics, visible }) => {
+const RiskPanelImpl: React.FC<RiskPanelProps> = ({ metrics, visible }) => {
   const { slot, isNarrow } = useHudLayout();
 
   if (!visible) return null;
@@ -235,5 +235,8 @@ const panelStyles = StyleSheet.create({
     fontWeight: '800',
   },
 });
+
+/** Memoized: the HUD re-renders on unrelated state changes. */
+export const RiskPanel = React.memo(RiskPanelImpl);
 
 export default RiskPanel;

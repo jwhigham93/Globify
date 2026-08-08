@@ -1,55 +1,68 @@
 /**
- * Starry background component - creates a rotating star sphere
+ * Starry background — an equirectangular scene background.
+ *
+ * This used to be a textured sphere of radius 20000 rendered with BackSide.
+ * That cost a full-screen textured draw every frame and forced CAMERA_FAR to
+ * 50000, giving a 50000:1 depth range that wrecked precision for the small
+ * surface markers. `scene.background` is composited by the renderer instead,
+ * and `scene.backgroundRotation` keeps the spin control working.
  */
 
-import React, { useRef, useState, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { TEXTURE_ASSETS, resolveAssetUri } from './textures';
-import { STAR_SPHERE_RADIUS } from './constants';
+import { STAR_ROTATION_SPEED_Y, STAR_ROTATION_SPEED_X } from './constants';
 
 export interface StarryBackgroundProps {
   isSpinning?: boolean;
 }
 
-export const StarryBackground: React.FC<StarryBackgroundProps> = ({ isSpinning = true }) => {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const [texture, setTexture] = useState<THREE.Texture | null>(null);
+export const StarryBackground: React.FC<StarryBackgroundProps> = ({
+  isSpinning = true,
+}) => {
   const { scene } = useThree();
+  const textureRef = useRef<THREE.Texture | null>(null);
 
   useEffect(() => {
-    // Set a dark background color as fallback
+    // Dark fill until the star texture arrives.
     scene.background = new THREE.Color(0x000011);
 
-    // Load the star texture from local assets
-    const textureUri = resolveAssetUri(TEXTURE_ASSETS.nightSky);
+    let cancelled = false;
     const loader = new THREE.TextureLoader();
     loader.load(
-      textureUri,
+      resolveAssetUri(TEXTURE_ASSETS.nightSky),
       (loadedTexture) => {
-        setTexture(loadedTexture);
+        if (cancelled) {
+          loadedTexture.dispose();
+          return;
+        }
+        loadedTexture.mapping = THREE.EquirectangularReflectionMapping;
+        loadedTexture.colorSpace = THREE.SRGBColorSpace;
+        textureRef.current = loadedTexture;
+        scene.background = loadedTexture;
       },
       undefined,
       (error) => {
         console.error('Error loading star texture:', error);
-      }
+      },
     );
+
+    return () => {
+      cancelled = true;
+      scene.background = null;
+      textureRef.current?.dispose();
+      textureRef.current = null;
+    };
   }, [scene]);
 
-  // Rotate the star sphere slowly (only when spinning is enabled)
   useFrame(() => {
-    if (meshRef.current && isSpinning) {
-      meshRef.current.rotation.y += 0.0001;
-      meshRef.current.rotation.x += 0.00005;
-    }
+    // Only meaningful once the equirect texture is installed; rotating a solid
+    // Color background is a no-op, which is the correct fallback behaviour.
+    if (!isSpinning || !textureRef.current) return;
+    scene.backgroundRotation.y += STAR_ROTATION_SPEED_Y;
+    scene.backgroundRotation.x += STAR_ROTATION_SPEED_X;
   });
 
-  if (!texture) return null;
-
-  return (
-    <mesh ref={meshRef}>
-      <sphereGeometry args={[STAR_SPHERE_RADIUS, 32, 32]} />
-      <meshBasicMaterial side={THREE.BackSide} map={texture} />
-    </mesh>
-  );
+  return null;
 };

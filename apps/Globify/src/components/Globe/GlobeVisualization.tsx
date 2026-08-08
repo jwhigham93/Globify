@@ -10,22 +10,15 @@ import React, { useState, useMemo, useCallback, useEffect, Suspense } from 'reac
 import { View, Platform, Text, ActivityIndicator } from 'react-native';
 import { Canvas } from '@react-three/fiber';
 import type { GlobeVisualizationProps, ViewMode, DataPoint, SelectedEntity, NetworkRiskMetrics, DisruptionMetrics, RoutePathSegment } from './types';
-import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, CONTROLS_HINT_HIDE_DISTANCE, ROUTE_PATH_COMPLETED_STROKE, ROUTE_PATH_REMAINING_STROKE, TRUCK_COLOR_LIVE, TRUCK_COLOR_STALE, TRUCK_COLOR_LOST } from './constants';
+import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, DPR_MAX_TOUCH, DPR_MAX_DESKTOP, ROUTE_PATH_COMPLETED_STROKE, ROUTE_PATH_REMAINING_STROKE, TRUCK_COLOR_LIVE, TRUCK_COLOR_STALE, TRUCK_COLOR_LOST } from './constants';
 import { styles } from './styles';
 import { LoadingFallback } from './LoadingFallback';
 import { GlobeScene } from './GlobeScene';
 import { GlobeErrorBoundary } from './GlobeErrorBoundary';
-import { RiskPanel } from './RiskPanel';
-import { LegendPanel } from './LegendPanel';
-import { DisruptionPanel } from './DisruptionPanel';
-import { EntityDetailPanel } from './EntityDetailPanel';
-import { TruckDetailPanel } from './TruckDetailPanel';
-import { SpinToggle } from './SpinToggle';
-import { HintPill } from './HintPill';
-import { FailureBanner } from './FailureBanner';
-import { HudControlBar } from './HudControlBar';
 import { GlobeHud } from './GlobeHud';
-import { HudContext } from '../ui/layout';
+import { computeZoomBand } from '../../services/zoomBands';
+import type { ZoomBand } from '../../services/zoomBands';
+import { HudContext, useIsTouch } from '../ui/layout';
 import type { HudState } from '../ui/layout';
 import { applyRiskColorsToPoints, applyRiskColorsToArcs } from '../../services/riskVisuals';
 import { applyDisruptionToPoints, applyDisruptionToArcs } from '../../services/disruptionVisuals';
@@ -83,10 +76,18 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   // selections are driven by selectedLocationId + the entity-detail query below.
   const [selectedEntity, setSelectedEntity] = useState<SelectedEntity | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
-  const [cameraDistance, setCameraDistance] = useState<number>(
-    Math.round(Math.sqrt(CAMERA_POSITION[0] ** 2 + CAMERA_POSITION[1] ** 2 + CAMERA_POSITION[2] ** 2))
+  // Only the two booleans the UI actually branches on, not the raw distance.
+  // Reporting every 1-unit change re-rendered this whole tree ~70 times per
+  // zoom sweep, each render re-clustering the dataset and rebuilding markers.
+  const [zoomBand, setZoomBand] = useState<ZoomBand>(() =>
+    computeZoomBand(
+      Math.sqrt(CAMERA_POSITION[0] ** 2 + CAMERA_POSITION[1] ** 2 + CAMERA_POSITION[2] ** 2),
+    ),
   );
   const [zoomTarget, setZoomTarget] = useState<number | null>(null);
+
+  const isTouch = useIsTouch();
+  const maxDpr = isTouch ? DPR_MAX_TOUCH : DPR_MAX_DESKTOP;
 
   // ── Truck GPS layer ──────────────────────────────────────────────
   const [showTrucks, setShowTrucks] = useState(false);
@@ -224,21 +225,17 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
 
   // LOD clustering — aggregate nearby restaurants at far zoom
   const { dataPoints: lodDataPoints, arcsData: lodArcsData } = useMemo(
-    () => clusterByZoom(dataPoints, arcsData, cameraDistance),
-    [dataPoints, arcsData, cameraDistance],
+    () => clusterByZoom(dataPoints, arcsData, zoomBand.lodClustered),
+    [dataPoints, arcsData, zoomBand.lodClustered],
   );
 
   // When zooming past the cluster threshold while a cluster is selected,
   // clear the selection so individual markers appear normally (same as "Zoom to Expand").
   useEffect(() => {
-    if (
-      selectedEntity &&
-      selectedEntity.type === 'cluster' &&
-      cameraDistance < LOD_CLUSTER_CAMERA_THRESHOLD
-    ) {
+    if (!zoomBand.lodClustered && selectedEntity?.type === 'cluster') {
       setSelectedEntity(null);
     }
-  }, [cameraDistance, selectedEntity]);
+  }, [zoomBand.lodClustered, selectedEntity]);
 
   // Derive risk-colored arcs when in concentration-risk view
   const effectiveArcsData = useMemo(() => {
@@ -476,6 +473,16 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
               near: CAMERA_NEAR,
               far: CAMERA_FAR
             }}
+            // R3F would otherwise default to dpr [1,2] with MSAA, which on a
+            // 3x phone is ~4x the fragment work every frame — enough to pin the
+            // GPU and thermally throttle the device within a minute.
+            dpr={[1, maxDpr]}
+            gl={{
+              antialias: !isTouch,
+              powerPreference: 'high-performance',
+              alpha: false,
+              stencil: false,
+            }}
             style={styles.canvas}
           >
             <GlobeScene
@@ -487,7 +494,8 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
               isStarsSpinning={isStarsSpinning}
               onPointClick={handlePointClick}
               onBackgroundClick={handleCloseEntity}
-              onZoomChange={setCameraDistance}
+              onZoomBandChange={setZoomBand}
+              maxDpr={maxDpr}
               zoomTarget={zoomTarget}
               onZoomTargetReached={handleZoomTargetReached}
               tileCdnUrl={config.resolvedTileCdnUrl}
@@ -510,7 +518,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
           vehicleCount={vehiclePositions.size}
           failedQueries={failedQueries}
           showDisruptionHint={viewMode === 'disruption' && disabledNodeIds.size === 0}
-          showControlsHint={cameraDistance > CONTROLS_HINT_HIDE_DISTANCE}
+          showControlsHint={zoomBand.showHint}
           networkRiskMetrics={networkRiskMetrics}
           riskPanelVisible={viewMode === 'concentration-risk' && isRiskSuccess}
           disruptionMetrics={disruptionMetrics}

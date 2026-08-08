@@ -76,7 +76,24 @@ export const MARKER_CLUSTER_GLOW_INTENSITY = 2.0;
 export const CAMERA_POSITION: [number, number, number] = [-196, 105, -17];
 export const CAMERA_FOV = 75;
 export const CAMERA_NEAR = 1;
-export const CAMERA_FAR = 50000;
+// The star field is a scene.background, not a 20000-unit sphere, so the far
+// plane only has to clear the globe. A 50000:1 depth range wrecked precision
+// for the small surface markers.
+export const CAMERA_FAR = 2000;
+
+// Renderer resolution caps. R3F defaults to dpr [1, 2] with antialiasing, which
+// on a 3x phone is ~4x the fragment work plus an MSAA resolve every frame — the
+// GPU pins, the device thermally throttles, and the framerate never recovers.
+export const DPR_MAX_TOUCH = 1.25;
+export const DPR_MAX_DESKTOP = 2;
+/** Floor for the adaptive downscale when frames run long. */
+export const DPR_MIN = 0.75;
+/** Rolling window (frames) used to judge sustained frame cost. */
+export const DPR_SAMPLE_FRAMES = 60;
+/** Mean frame time above which resolution steps down (~45fps). */
+export const DPR_DOWNSCALE_MS = 22;
+/** Mean frame time below which resolution steps back up (~77fps). */
+export const DPR_UPSCALE_MS = 13;
 
 // Zoom limits (camera distance from origin)
 export const ZOOM_MIN_DISTANCE = 102;  // Closest zoom — extended for tile detail
@@ -91,6 +108,12 @@ export const ZOOM_SLOWDOWN_DIST = 160;        // distance below which zoom start
 // Adaptive drag (rotate) speed — slows mouse drag as camera nears the surface
 export const ROTATE_SPEED_FAR = 1.0;          // normal drag speed when far
 export const ROTATE_SPEED_NEAR = 0.2;         // slow drag speed near surface
+
+// OrbitControls inertia — makes touch rotation feel smooth on a phone.
+export const ORBIT_DAMPING_FACTOR = 0.08;
+// Dead zone (camera units) around a zoom-band threshold, so jitter while
+// sitting on the boundary can't oscillate the flag and thrash React.
+export const ZOOM_BAND_HYSTERESIS = 3;
 
 // Progressive tile loading thresholds (camera distance)
 export const TILE_ZOOM_THRESHOLD_Z1 = 140; // Below this distance, load z1 tiles
@@ -126,6 +149,19 @@ export const TRUCK_SCALE_MULTIPLIER = 0.45;   // trucks render at this fraction 
 
 // Arc stroke zoom scaling — arcs thin out when zoomed in
 export const ARC_STROKE_SCALE_MIN = 0.55;     // stroke multiplier at closest zoom
+// Rebuilding an arc's stroke regenerates its TubeGeometry, so the scale is
+// quantized into this many bands and only rebuilt on a band change once the
+// camera has settled — never during a gesture.
+export const ARC_STROKE_BANDS = 3;
+export const ARC_SETTLE_MS = 200;              // camera-still delay before rebuilding
+// Tube resolution. three-globe defaults to 64x6 per arc; a quarter of that is
+// indistinguishable at max zoom and cuts vertex count ~4x across 234 arcs.
+export const ARC_CURVE_RESOLUTION = 32;
+export const ARC_CIRCULAR_RESOLUTION = 4;
+
+// Marker rescaling is driven by camera distance, which is constant while
+// rotating — skip the whole pass unless the distance actually moved.
+export const MARKER_SCALE_EPSILON = 0.5;
 
 // Truck pulse animation (live status glow)
 export const TRUCK_PULSE_MIN_SCALE = 1.0;

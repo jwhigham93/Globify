@@ -15,7 +15,7 @@ interface TruckLayerToggleProps {
   vehicleCount: number;
 }
 
-export const TruckLayerToggle: React.FC<TruckLayerToggleProps> = ({
+const TruckLayerToggleImpl: React.FC<TruckLayerToggleProps> = ({
   visible,
   onToggle,
   vehicleCount,
@@ -74,3 +74,6 @@ const toggleStyles = StyleSheet.create({
     marginTop: 1,
   },
 });
+
+/** Memoized: the HUD re-renders on unrelated state changes. */
+export const TruckLayerToggle = React.memo(TruckLayerToggleImpl);

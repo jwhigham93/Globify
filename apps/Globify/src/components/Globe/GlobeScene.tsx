@@ -36,6 +36,11 @@ import {
   TRUCK_SCALE_MULTIPLIER,
   TRUCK_LOST_SIZE_BOOST,
   ARC_STROKE_SCALE_MIN,
+  ARC_STROKE_BANDS,
+  ARC_SETTLE_MS,
+  ARC_CURVE_RESOLUTION,
+  ARC_CIRCULAR_RESOLUTION,
+  MARKER_SCALE_EPSILON,
   ROUTE_PATH_ALTITUDE,
   ROUTE_PATH_DASH_LENGTH,
   ROUTE_PATH_DASH_GAP,
@@ -62,6 +67,8 @@ import type { VehiclePosition } from '../../services/useVehiclePositions';
 import { buildAltitudeMap } from '../../services/collisionDetection';
 import { StarryBackground } from './StarryBackground';
 import { Controls } from './Controls';
+import type { ZoomBand } from '../../services/zoomBands';
+import { useAdaptiveDpr } from './useAdaptiveDpr';
 
 export interface GlobeSceneProps {
   dataPoints: DataPoint[];
@@ -73,7 +80,7 @@ export interface GlobeSceneProps {
   onPointClick?: (point: DataPoint) => void;
   /** Called when the user clicks on empty space (no marker hit) */
   onBackgroundClick?: () => void;
-  onZoomChange?: (distance: number) => void;
+  onZoomBandChange?: (band: ZoomBand) => void;
   /** When set, smoothly animate the camera to this distance */
   zoomTarget?: number | null;
   /** Called when the camera reaches the zoom target */
@@ -90,6 +97,51 @@ export interface GlobeSceneProps {
   onTruckClick?: (vehicleId: string) => void;
   /** Route path segments for selected truck (origin→truck, truck→destination) */
   routePathData?: RoutePathSegment[];
+  /** Ceiling for the adaptive pixel ratio. */
+  maxDpr: number;
+}
+
+/**
+ * Mutable datum handed to three-globe's objects layer.
+ *
+ * three-globe joins data by object *identity* (data-bind-mapper's default id
+ * accessor is `d => d`, and three-globe never overrides it). Passing freshly
+ * spread literals therefore made it destroy and recreate all ~213 marker
+ * meshes — disposing and reallocating a geometry and material each — on every
+ * data update. Reusing one object per id keeps unchanged markers on the update
+ * path instead, with zero geometry churn.
+ */
+type MutableDatum = DataPoint & { __kind: 'location' };
+
+/**
+ * Copy a point's fields into a cached datum in place, preserving its identity.
+ * Returns true when the marker's appearance changed and its material needs a
+ * refresh — three-globe only reads `objectThreeObject` on create, so color is
+ * the one accessor that will not propagate on its own.
+ */
+function syncDatum(target: MutableDatum, source: DataPoint): boolean {
+  const colorChanged = target.color !== source.color;
+  target.lat = source.lat;
+  target.lng = source.lng;
+  target.color = source.color;
+  target.size = source.size;
+  target.label = source.label;
+  target.value = source.value;
+  target.locationType = source.locationType;
+  return colorChanged;
+}
+
+/** Apply a color to a marker mesh or cluster group in place. */
+function applyMarkerColor(object: THREE.Object3D, color: string): void {
+  const next = new THREE.Color(color);
+  object.traverse((child) => {
+    const material = (child as THREE.Mesh).material as
+      | THREE.MeshStandardMaterial
+      | undefined;
+    if (!material || !material.color) return;
+    material.color.copy(next);
+    if (material.emissive) material.emissive.copy(next);
+  });
 }
 
 /**
@@ -195,7 +247,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   isStarsSpinning = true,
   onPointClick,
   onBackgroundClick,
-  onZoomChange,
+  onZoomBandChange,
   zoomTarget,
   onZoomTargetReached,
   tileCdnUrl = '',
@@ -204,28 +256,66 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   showTrucks = false,
   onTruckClick,
   routePathData = [],
+  maxDpr,
 }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globeRef = useRef<any>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isGlobeReady, setIsGlobeReady] = useState(false);
   const { scene, camera, gl } = useThree();
+  const setFrameloop = useThree((state) => state.setFrameloop);
+
+  useAdaptiveDpr(maxDpr);
 
   // Track ALL object meshes for per-frame zoom scaling
   const objectMeshesRef = useRef<Map<string, THREE.Object3D>>(new Map());
   // Subset: truck meshes (for pulse animation + status updates)
   const truckMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
 
+  // Stable per-id data objects for the three-globe objects layer (see MutableDatum).
+  const datumCacheRef = useRef<Map<string, MutableDatum>>(new Map());
+
+  // buildAltitudeMap is O(n^2) over ~213 locations. Positions are static for a
+  // given id, so the result only has to be recomputed when the id set changes —
+  // not on every recolor or zoom-driven update.
+  const altitudeMapRef = useRef<Map<string, number>>(new Map());
+  const altitudeSignatureRef = useRef<string>('');
+
   // Arc stroke scaling: ref for current scale + ref for current arcsData prop
   const arcStrokeScaleRef = useRef(1);
   const arcsDataRef = useRef(arcsData);
   arcsDataRef.current = arcsData;
-  const lastArcRefreshDist = useRef(0);
+  const lastArcBandRef = useRef(-1);
+  const lastMoveTimeRef = useRef(0);
+  const lastMoveDistRef = useRef(0);
+  const lastScaleDistRef = useRef(Number.NaN);
+
+  /**
+   * Collision-aware altitude offsets, recomputed only when the set of location
+   * ids changes. Lat/lng are fixed per id, so recolouring or a zoom-driven
+   * update can reuse the previous result.
+   */
+  const resolveAltitudeMap = React.useCallback(
+    (points: DataPoint[]): Map<string, number> => {
+      const signature = points.map((p) => p.id ?? '').join('|');
+      if (signature !== altitudeSignatureRef.current) {
+        altitudeSignatureRef.current = signature;
+        altitudeMapRef.current = buildAltitudeMap(points);
+      }
+      return altitudeMapRef.current;
+    },
+    [],
+  );
 
   // Tile system refs
   const tileManagerRef = useRef<TileManager | null>(null);
   const tileMaterialRef = useRef<TileShaderMaterial | null>(null);
+  // The globe's original lit material, restored when leaving the tile band.
+  const baseMaterialRef = useRef<THREE.Material | null>(null);
+  const tileMaterialInstalledRef = useRef(false);
   const lastTileCheckRef = useRef<number>(0);
+  // Reused so the throttled tile check allocates nothing per frame.
+  const tileDirRef = useRef(new THREE.Vector3());
 
   // Initialize globe once on mount - separate from data updates
   useEffect(() => {
@@ -239,9 +329,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     }
     
     try {
-      // Pre-compute collision-aware altitude offsets
-      const altitudeMap = buildAltitudeMap(dataPoints);
-      
+
       // Create globe instance matching submarine cables example style
       // Using NASA Black Marble 2016 high-resolution texture (13500x6750)
       // Options: earthNightHighRes (high-res), earthNightMediumRes (lighter weight)
@@ -253,15 +341,19 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         .showAtmosphere(true)
         .atmosphereColor(ATMOSPHERE_COLOR)
         .atmosphereAltitude(ATMOSPHERE_ALTITUDE)
-        // Custom 3D markers per location type (cone/box/sphere)
-        .objectsData(dataPoints)
+        // Custom 3D markers per location type (cone/box/sphere).
+        // Populated by the data effect below, which owns the stable-identity
+        // datum cache; seeding here would only cause an immediate rebuild.
+        .objectsData([])
         .objectLat((d: object) => (d as DataPoint).lat)
         .objectLng((d: object) => (d as DataPoint).lng)
+        // Reads the ref so the accessor never needs re-registering when the
+        // altitude map is recomputed.
         .objectAltitude((d: object) => {
           const item = d as { __kind?: string; id?: string };
           if (item.__kind === 'truck') return TRUCK_MARKER_ALTITUDE;
           const point = d as DataPoint;
-          return altitudeMap.get(point.id || '') || 0;
+          return altitudeMapRef.current.get(point.id || '') || 0;
         })
         .objectThreeObject((d: object) => {
           const item = d as { __kind?: string; gpsStatus?: GpsStatus; id?: string };
@@ -286,7 +378,12 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
           }
           return { x: 0, y: 0, z: 0 };
         })
-        // Arc configuration for supply chain visualization
+        // Arc configuration for supply chain visualization.
+        // Resolution must be set before data is pushed — both are
+        // triggerUpdate:false in three-globe, so they only take effect on the
+        // next arcsData() call.
+        .arcCurveResolution(ARC_CURVE_RESOLUTION)
+        .arcCircularResolution(ARC_CIRCULAR_RESOLUTION)
         .arcsData(arcsData)
         .arcStartLat((d: object) => (d as ArcData).startLat)
         .arcStartLng((d: object) => (d as ArcData).startLng)
@@ -344,11 +441,40 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     if (!globeRef.current || !isInitialized) return;
     if (dataPoints.length === 0 && (!showTrucks || !vehiclePositions || vehiclePositions.size === 0)) return;
 
-    // Recompute collision altitudes for location markers
-    const altitudeMap = buildAltitudeMap(dataPoints);
+    // Collision altitudes — memoized on the id set, so this is a map lookup
+    // rather than an O(n^2) rebuild on every recolor.
+    resolveAltitudeMap(dataPoints);
 
-    // Tag location objects so the callbacks can distinguish them from trucks
-    const locationObjects = dataPoints.map(dp => ({ ...dp, __kind: 'location' as const }));
+    // Reuse one datum object per id so three-globe's identity-keyed data join
+    // sees unchanged markers as updates rather than remove+recreate. Spreading
+    // fresh literals here is what made every zoom tick destroy and rebuild all
+    // ~213 marker meshes.
+    const cache = datumCacheRef.current;
+    const seen = new Set<string>();
+    const locationObjects: MutableDatum[] = [];
+    const recolored: MutableDatum[] = [];
+
+    for (const point of dataPoints) {
+      const id = point.id;
+      if (!id) {
+        // Without an id there is nothing to key on; fall back to a literal.
+        locationObjects.push({ ...point, __kind: 'location' });
+        continue;
+      }
+      seen.add(id);
+      const existing = cache.get(id);
+      if (existing) {
+        if (syncDatum(existing, point)) recolored.push(existing);
+        locationObjects.push(existing);
+      } else {
+        const datum: MutableDatum = { ...point, __kind: 'location' };
+        cache.set(id, datum);
+        locationObjects.push(datum);
+      }
+    }
+    for (const id of cache.keys()) {
+      if (!seen.has(id)) cache.delete(id);
+    }
 
     // Build truck objects when layer is visible
     const truckObjects = showTrucks && vehiclePositions && vehiclePositions.size > 0
@@ -369,15 +495,21 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       truckMeshesRef.current.clear();
     }
 
-    globeRef.current
-      .objectAltitude((d: object) => {
-        const item = d as { __kind?: string };
-        if (item.__kind === 'truck') return TRUCK_MARKER_ALTITUDE;
-        const point = d as DataPoint;
-        return altitudeMap.get(point.id || '') || 0;
-      })
-      .objectsData([...locationObjects, ...truckObjects]);
-  }, [dataPoints, isInitialized, showTrucks, vehiclePositions]);
+    globeRef.current.objectsData([...locationObjects, ...truckObjects]);
+
+    // Newly created meshes start at scale 1. The per-frame scaling pass skips
+    // itself while the camera distance is unchanged, so invalidate it here or
+    // fresh markers would stay unscaled until the user happens to zoom.
+    lastScaleDistRef.current = Number.NaN;
+
+    // three-globe calls objectThreeObject only on create — its update path
+    // re-reads lat/lng/altitude/rotation but never the color. Now that markers
+    // survive across updates, recolors have to be pushed to the material.
+    for (const datum of recolored) {
+      const mesh = objectMeshesRef.current.get(`loc:${datum.id}`);
+      if (mesh && datum.color) applyMarkerColor(mesh, datum.color);
+    }
+  }, [dataPoints, isInitialized, showTrucks, vehiclePositions, resolveAltitudeMap]);
 
   // Update arcs data when it changes (separate from initialization)
   useEffect(() => {
@@ -481,13 +613,15 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       const manager = new TileManager(tileCdnUrl);
       tileManagerRef.current = manager;
 
-      // Get the globe mesh's material to create tile composite shader
-      const globeMesh = globeRef.current.globeMaterial?.();
-      if (globeMesh?.map) {
-        const tileMat = createTileCompositeMaterial(globeMesh.map);
-        tileMaterialRef.current = tileMat;
-        // Replace the globe's material with our custom shader
-        globeRef.current.globeMaterial(tileMat);
+      // Build the tile composite shader but do NOT install it yet. It samples
+      // up to MAX_TILE_SLOTS textures with a branch per slot across the whole
+      // globe; installing it permanently meant paying that at every camera
+      // distance, including the default view where no tile can ever load.
+      // The frame loop swaps it in only inside the tile zoom band.
+      const baseMaterial = globeRef.current.globeMaterial?.();
+      if (baseMaterial?.map) {
+        baseMaterialRef.current = baseMaterial;
+        tileMaterialRef.current = createTileCompositeMaterial(baseMaterial.map);
       }
 
       // Set up tile loaded callback
@@ -518,17 +652,48 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       cancelled = true;
       tileManagerRef.current?.dispose();
       tileManagerRef.current = null;
+      // Put the lit material back before dropping our reference to it.
+      if (tileMaterialInstalledRef.current && baseMaterialRef.current) {
+        globeRef.current?.globeMaterial(baseMaterialRef.current);
+      }
+      tileMaterialInstalledRef.current = false;
+      tileMaterialRef.current?.dispose();
       tileMaterialRef.current = null;
+      baseMaterialRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tileCdnUrl, isGlobeReady]);
 
+  // ── Pause everything while the tab is hidden ────────────────────
+  // three-globe runs its own requestAnimationFrame for the arc dash animation,
+  // outside R3F's loop, so stopping the frame loop alone is not enough.
+  useEffect(() => {
+    if (typeof document === 'undefined' || !document.addEventListener) return;
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        globeRef.current?.pauseAnimation?.();
+        setFrameloop('never');
+      } else {
+        globeRef.current?.resumeAnimation?.();
+        setFrameloop('always');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      // Never leave the loop stopped on unmount.
+      setFrameloop('always');
+    };
+  }, [setFrameloop]);
+
   // ── Tile render loop (throttled) ────────────────────────────────
-  useFrame((_state, _delta) => {
+  useFrame(() => {
     const manager = tileManagerRef.current;
     const mat = tileMaterialRef.current;
 
-    if (mat) {
+    if (mat && tileMaterialInstalledRef.current) {
       animateTileFadeIn(mat, TILE_FADE_DURATION);
     }
 
@@ -539,10 +704,20 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     lastTileCheckRef.current = now;
 
     const dist = camera.position.length();
-    if (dist > TILE_ZOOM_THRESHOLD_Z1) return;
+    const inTileBand = dist <= TILE_ZOOM_THRESHOLD_Z1;
 
-    // Compute center lat/lng from camera position
-    const dir = camera.position.clone().normalize();
+    // Swap the composite shader in and out with the tile band, on transitions
+    // only, so the expensive multi-sampler program is not resident at rest.
+    if (inTileBand !== tileMaterialInstalledRef.current && mat && baseMaterialRef.current) {
+      tileMaterialInstalledRef.current = inTileBand;
+      globeRef.current?.globeMaterial(inTileBand ? mat : baseMaterialRef.current);
+    }
+
+    if (!inTileBand) return;
+
+    // Compute center lat/lng from camera position. Valid because the camera
+    // orbits the origin — panning is disabled in Controls for this reason.
+    const dir = tileDirRef.current.copy(camera.position).normalize();
     const lat = Math.asin(dir.y) * (180 / Math.PI);
     const lng = Math.atan2(dir.x, dir.z) * (180 / Math.PI);
 
@@ -559,17 +734,24 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     const zoomScale = MARKER_SCALE_MIN + zoomT * (MARKER_SCALE_MAX - MARKER_SCALE_MIN);
     const truckScale = zoomScale * TRUCK_SCALE_MULTIPLIER;
 
-    // Scale all object markers (locations use zoomScale, trucks use truckScale)
-    objectMeshesRef.current.forEach((obj, key) => {
-      if (!obj.parent) {
-        objectMeshesRef.current.delete(key);
-        return;
-      }
-      const isTruck = truckMeshesRef.current.has(key);
-      obj.scale.setScalar(isTruck ? truckScale : zoomScale);
-    });
+    // Rotating the globe leaves |camera.position| unchanged, so this whole pass
+    // is redundant during a rotate gesture — and writing scale on ~233 objects
+    // dirties 233 matrices for three to recompose every frame.
+    const distMoved = Math.abs(dist - lastScaleDistRef.current);
+    if (!(distMoved < MARKER_SCALE_EPSILON)) {
+      lastScaleDistRef.current = dist;
+      objectMeshesRef.current.forEach((obj, key) => {
+        if (!obj.parent) {
+          objectMeshesRef.current.delete(key);
+          return;
+        }
+        const isTruck = truckMeshesRef.current.has(key);
+        obj.scale.setScalar(isTruck ? truckScale : zoomScale);
+      });
+    }
 
-    // Truck-specific: pulse animation + status color updates
+    // Truck-specific: pulse animation + status color updates. Genuinely
+    // per-frame (the pulse is time-driven) but only over ~20 objects.
     if (showTrucks) {
       const t = performance.now() / 1000;
       truckMeshesRef.current.forEach((mesh, id) => {
@@ -587,11 +769,26 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       });
     }
 
-    // Arc stroke scaling — refresh when zoom changes by >3 units
-    const newArcScale = ARC_STROKE_SCALE_MIN + zoomT * (1 - ARC_STROKE_SCALE_MIN);
-    arcStrokeScaleRef.current = newArcScale;
-    if (globeRef.current && Math.abs(dist - lastArcRefreshDist.current) > 3) {
-      lastArcRefreshDist.current = dist;
+    // Arc stroke scaling. Pushing arcsData regenerates a TubeGeometry for every
+    // arc, so the scale is quantized into a few bands and only rebuilt on a band
+    // change *after* the camera has settled — never mid-gesture.
+    const band = Math.min(
+      ARC_STROKE_BANDS - 1,
+      Math.floor(zoomT * ARC_STROKE_BANDS),
+    );
+    const bandSpan = Math.max(1, ARC_STROKE_BANDS - 1);
+    const bandT = band / bandSpan;
+    arcStrokeScaleRef.current =
+      ARC_STROKE_SCALE_MIN + bandT * (1 - ARC_STROKE_SCALE_MIN);
+
+    const now = performance.now();
+    if (Math.abs(dist - lastMoveDistRef.current) > 0.01) {
+      lastMoveDistRef.current = dist;
+      lastMoveTimeRef.current = now;
+    }
+    const settled = now - lastMoveTimeRef.current >= ARC_SETTLE_MS;
+    if (globeRef.current && settled && band !== lastArcBandRef.current) {
+      lastArcBandRef.current = band;
       globeRef.current.arcsData(arcsDataRef.current);
     }
   });
@@ -604,7 +801,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       <ambientLight color={0xcccccc} intensity={2.6 * Math.PI} />
       <directionalLight position={[-2, 2, 0]} intensity={1.6 * Math.PI} />
       <Controls
-        onZoomChange={onZoomChange}
+        onZoomBandChange={onZoomBandChange}
         zoomTarget={zoomTarget}
         onZoomTargetReached={onZoomTargetReached}
       />
