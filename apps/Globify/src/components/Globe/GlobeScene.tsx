@@ -55,18 +55,11 @@ import {
 } from './tileShader';
 import { TileManager } from '../../services/tileManager';
 import { tileToLatLngBounds } from '../../services/tileCoordinates';
-import {
-  createTruckMarker,
-  updateTruckMarkerStatus,
-  computePulseScale,
-  getTruckColor,
-  disposeTruckResources,
-  type GpsStatus,
-} from '../../services/truckVisuals';
 import type { VehiclePosition } from '../../services/useVehiclePositions';
 import { buildAltitudeMap } from '../../services/collisionDetection';
 import { StarryBackground } from './StarryBackground';
 import { Controls } from './Controls';
+import { TruckLayer } from './TruckLayer';
 import type { ZoomBand } from '../../services/zoomBands';
 import { useAdaptiveDpr } from './useAdaptiveDpr';
 
@@ -269,8 +262,6 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
 
   // Track ALL object meshes for per-frame zoom scaling
   const objectMeshesRef = useRef<Map<string, THREE.Object3D>>(new Map());
-  // Subset: truck meshes (for pulse animation + status updates)
-  const truckMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
 
   // Stable per-id data objects for the three-globe objects layer (see MutableDatum).
   const datumCacheRef = useRef<Map<string, MutableDatum>>(new Map());
@@ -350,33 +341,14 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         // Reads the ref so the accessor never needs re-registering when the
         // altitude map is recomputed.
         .objectAltitude((d: object) => {
-          const item = d as { __kind?: string; id?: string };
-          if (item.__kind === 'truck') return TRUCK_MARKER_ALTITUDE;
           const point = d as DataPoint;
           return altitudeMapRef.current.get(point.id || '') || 0;
         })
         .objectThreeObject((d: object) => {
-          const item = d as { __kind?: string; gpsStatus?: GpsStatus; id?: string };
-          if (item.__kind === 'truck') {
-            const mesh = createTruckMarker(item.gpsStatus as GpsStatus);
-            mesh.userData.vehicleId = item.id;
-            truckMeshesRef.current.set(item.id!, mesh);
-            objectMeshesRef.current.set(`truck:${item.id}`, mesh);
-            return mesh;
-          }
-          const marker = createLocationMarker(d as DataPoint);
           const point = d as DataPoint;
+          const marker = createLocationMarker(point);
           if (point.id) objectMeshesRef.current.set(`loc:${point.id}`, marker);
           return marker;
-        })
-        .objectRotation((d: object) => {
-          const item = d as { __kind?: string; heading?: number };
-          if (item.__kind === 'truck' && item.heading != null) {
-            // three-globe applies deg2Rad internally, so pass degrees.
-            // heading 0 = North (+Y in local space). Rotate CW around Z (outward).
-            return { x: 0, y: 0, z: -item.heading };
-          }
-          return { x: 0, y: 0, z: 0 };
         })
         // Arc configuration for supply chain visualization.
         // Resolution must be set before data is pushed — both are
@@ -439,7 +411,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   // Update data points (and truck markers) when they change
   useEffect(() => {
     if (!globeRef.current || !isInitialized) return;
-    if (dataPoints.length === 0 && (!showTrucks || !vehiclePositions || vehiclePositions.size === 0)) return;
+    if (dataPoints.length === 0) return;
 
     // Collision altitudes — memoized on the id set, so this is a map lookup
     // rather than an O(n^2) rebuild on every recolor.
@@ -476,26 +448,9 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       if (!seen.has(id)) cache.delete(id);
     }
 
-    // Build truck objects when layer is visible
-    const truckObjects = showTrucks && vehiclePositions && vehiclePositions.size > 0
-      ? Array.from(vehiclePositions.values()).map(vp => ({
-          __kind: 'truck' as const,
-          id: vp.vehicleId,
-          lat: vp.lat,
-          lng: vp.lng,
-          heading: vp.heading,
-          gpsStatus: vp.gpsStatus as GpsStatus,
-        }))
-      : [];
-
-    // When hiding trucks, immediately make meshes invisible so three-globe's
-    // exit transition doesn't show a "blow up" scale animation.
-    if (!showTrucks && truckMeshesRef.current.size > 0) {
-      truckMeshesRef.current.forEach(mesh => { mesh.visible = false; });
-      truckMeshesRef.current.clear();
-    }
-
-    globeRef.current.objectsData([...locationObjects, ...truckObjects]);
+    // Trucks are not in this layer — TruckLayer owns them, so vehicle updates
+    // no longer force every location marker to rebuild.
+    globeRef.current.objectsData(locationObjects);
 
     // Newly created meshes start at scale 1. The per-frame scaling pass skips
     // itself while the camera distance is unchanged, so invalidate it here or
@@ -509,7 +464,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       const mesh = objectMeshesRef.current.get(`loc:${datum.id}`);
       if (mesh && datum.color) applyMarkerColor(mesh, datum.color);
     }
-  }, [dataPoints, isInitialized, showTrucks, vehiclePositions, resolveAltitudeMap]);
+  }, [dataPoints, isInitialized, resolveAltitudeMap]);
 
   // Update arcs data when it changes (separate from initialization)
   useEffect(() => {
@@ -560,24 +515,25 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
 
       raycaster.setFromCamera(mouse, camera);
 
-      // Raycast against all children of the globe (includes object markers)
+      // Raycast against all children of the globe. TruckLayer parents its group
+      // to the globe too, so truck hits come through the same traversal.
       const intersects = raycaster.intersectObjects(
         globeRef.current.children,
         true
       );
 
       for (const hit of intersects) {
-        // Walk up the parent chain to find the node with __data
-        // (three-globe attaches the data item to wrapper groups)
+        // Walk up the parent chain looking for either a truck wrapper (ours) or
+        // a node carrying __data (three-globe attaches it to its wrapper groups).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let obj: any = hit.object;
         while (obj && obj !== globeRef.current) {
+          const vehicleId = obj.userData?.vehicleId as string | undefined;
+          if (vehicleId) {
+            onTruckClick?.(vehicleId);
+            return;
+          }
           if (obj.__data) {
-            const data = obj.__data as { __kind?: string; id?: string };
-            if (data.__kind === 'truck' && data.id) {
-              onTruckClick?.(data.id);
-              return;
-            }
             onPointClick?.(obj.__data as DataPoint);
             return;
           }
@@ -732,11 +688,11 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       (dist - MARKER_SCALE_NEAR_DIST) / (MARKER_SCALE_FAR_DIST - MARKER_SCALE_NEAR_DIST),
     ));
     const zoomScale = MARKER_SCALE_MIN + zoomT * (MARKER_SCALE_MAX - MARKER_SCALE_MIN);
-    const truckScale = zoomScale * TRUCK_SCALE_MULTIPLIER;
 
     // Rotating the globe leaves |camera.position| unchanged, so this whole pass
-    // is redundant during a rotate gesture — and writing scale on ~233 objects
-    // dirties 233 matrices for three to recompose every frame.
+    // is redundant during a rotate gesture — and writing scale on ~213 objects
+    // dirties 213 matrices for three to recompose every frame.
+    // (Trucks scale themselves in TruckLayer, where the pulse lives.)
     const distMoved = Math.abs(dist - lastScaleDistRef.current);
     if (!(distMoved < MARKER_SCALE_EPSILON)) {
       lastScaleDistRef.current = dist;
@@ -745,27 +701,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
           objectMeshesRef.current.delete(key);
           return;
         }
-        const isTruck = truckMeshesRef.current.has(key);
-        obj.scale.setScalar(isTruck ? truckScale : zoomScale);
-      });
-    }
-
-    // Truck-specific: pulse animation + status color updates. Genuinely
-    // per-frame (the pulse is time-driven) but only over ~20 objects.
-    if (showTrucks) {
-      const t = performance.now() / 1000;
-      truckMeshesRef.current.forEach((mesh, id) => {
-        if (!mesh.parent) {
-          truckMeshesRef.current.delete(id);
-          return;
-        }
-        const vp = vehiclePositions?.get(id);
-        if (vp) {
-          updateTruckMarkerStatus(mesh, vp.gpsStatus as GpsStatus);
-          const pulse = computePulseScale(vp.gpsStatus as GpsStatus, t);
-          const boost = vp.gpsStatus === 'lost' ? TRUCK_LOST_SIZE_BOOST : 1;
-          mesh.scale.setScalar(pulse * truckScale * boost);
-        }
+        obj.scale.setScalar(zoomScale);
       });
     }
 
@@ -804,6 +740,12 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         onZoomBandChange={onZoomBandChange}
         zoomTarget={zoomTarget}
         onZoomTargetReached={onZoomTargetReached}
+      />
+      <TruckLayer
+        globeRef={globeRef}
+        vehiclePositions={vehiclePositions}
+        showTrucks={showTrucks}
+        isReady={isInitialized}
       />
     </>
   );

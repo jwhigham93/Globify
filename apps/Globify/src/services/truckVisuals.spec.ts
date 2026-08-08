@@ -1,12 +1,7 @@
 /**
  * Unit tests for truck visual utilities
  */
-import {
-  createTruckMarker,
-  updateTruckMarkerStatus,
-  getTruckColor,
-  computePulseScale,
-} from './truckVisuals';
+import { getTruckColor, computePulseScale } from './truckVisuals';
 import {
   TRUCK_COLOR_LIVE,
   TRUCK_COLOR_STALE,
@@ -32,42 +27,6 @@ describe('getTruckColor', () => {
 
   it('returns red for lost status', () => {
     expect(getTruckColor('lost')).toBe(TRUCK_COLOR_LOST);
-  });
-});
-
-// ── createTruckMarker ──────────────────────────────────────────────────
-
-describe('createTruckMarker', () => {
-  it('creates a mesh with correct userData', () => {
-    const mesh = createTruckMarker('live');
-    expect(mesh).toBeDefined();
-    expect(mesh.userData.truckStatus).toBe('live');
-  });
-
-  it('creates meshes for all statuses', () => {
-    for (const status of ['live', 'stale', 'lost'] as const) {
-      const mesh = createTruckMarker(status);
-      expect(mesh.userData.truckStatus).toBe(status);
-    }
-  });
-});
-
-// ── updateTruckMarkerStatus ────────────────────────────────────────────
-
-describe('updateTruckMarkerStatus', () => {
-  it('updates material when status changes', () => {
-    const mesh = createTruckMarker('live');
-    const originalMaterial = mesh.material;
-    updateTruckMarkerStatus(mesh, 'stale');
-    expect(mesh.material).not.toBe(originalMaterial);
-    expect(mesh.userData.truckStatus).toBe('stale');
-  });
-
-  it('skips update when status is the same', () => {
-    const mesh = createTruckMarker('live');
-    const originalMaterial = mesh.material;
-    updateTruckMarkerStatus(mesh, 'live');
-    expect(mesh.material).toBe(originalMaterial);
   });
 });
 

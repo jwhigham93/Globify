@@ -134,18 +134,41 @@ export const TRUCK_COLOR_LIVE = '#00E676';     // Bright green — active
 export const TRUCK_COLOR_STALE = '#FFAB00';    // Amber — stale
 export const TRUCK_COLOR_LOST = '#FF1744';     // Red — lost signal
 
-// Truck marker sizing (globe-relative units)
-export const TRUCK_MARKER_LENGTH = 1.2;       // arrow tip to tail
-export const TRUCK_MARKER_WIDTH = 0.7;        // wingspan of arrow
-export const TRUCK_MARKER_DEPTH = 0.1;        // extrusion thickness
+// Truck marker altitude above the globe surface
 export const TRUCK_MARKER_ALTITUDE = 0.005;
+
+// ── Low-poly car model (globe-relative units) ────────────────────────
+// Local frame: +Y forward, +Z up/outward. See services/carModel.ts.
+export const CAR_BODY_LENGTH = 1.15;
+export const CAR_BODY_WIDTH = 0.62;
+export const CAR_BODY_HEIGHT = 0.22;
+// Cabin is a tapered 4-sided frustum — the taper is what reads as a car from
+// a high orbit rather than two stacked bricks.
+export const CAR_CABIN_LENGTH = 0.52;
+export const CAR_CABIN_TOP_WIDTH = 0.19;
+export const CAR_CABIN_BOTTOM_WIDTH = 0.25;
+export const CAR_CABIN_HEIGHT = 0.16;
+export const CAR_WHEEL_LENGTH = 0.26;
+export const CAR_WHEEL_WIDTH = 0.09;
+export const CAR_WHEEL_HEIGHT = 0.16;
+// Flat ground glow, so a car-sized mesh is still findable at full zoom-out.
+export const CAR_HALO_SIZE = 2.2;
+export const CAR_HALO_OPACITY = 0.28;
+
+// Heading/position smoothing rates (higher = snappier). Positions glide between
+// pings rather than teleporting; headings sweep rather than snapping.
+export const TRUCK_HEADING_SMOOTH_K = 6;
+export const TRUCK_POSITION_SMOOTH_K = 3;
 
 // Zoom-based marker scaling — ALL markers scale with camera distance
 export const MARKER_SCALE_FAR_DIST = 200;     // camera distance where scale = max (default view)
 export const MARKER_SCALE_NEAR_DIST = 103;    // camera distance where scale = min (closest zoom)
 export const MARKER_SCALE_MAX = 2.5;          // scale factor when fully zoomed out
 export const MARKER_SCALE_MIN = 0.35;         // scale factor when fully zoomed in
-export const TRUCK_SCALE_MULTIPLIER = 0.45;   // trucks render at this fraction of location marker scale
+// Trucks render at this fraction of location marker scale. Raised with the car
+// model: at MARKER_SCALE_MAX the old 0.45 left a ~1.3-unit car on a radius-100
+// globe, which was barely visible.
+export const TRUCK_SCALE_MULTIPLIER = 0.7;
 
 // Arc stroke zoom scaling — arcs thin out when zoomed in
 export const ARC_STROKE_SCALE_MIN = 0.55;     // stroke multiplier at closest zoom
