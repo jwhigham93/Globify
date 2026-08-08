@@ -77,10 +77,10 @@ describe('EntityDetailPanel', () => {
 
   it('calls onClose when close button is pressed', () => {
     const onClose = jest.fn();
-    const { getByText } = render(
+    const { getByTestId } = render(
       <EntityDetailPanel entity={mockSupplier} onClose={onClose} />
     );
-    fireEvent.press(getByText('✕'));
+    fireEvent.press(getByTestId('entity-detail-close'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

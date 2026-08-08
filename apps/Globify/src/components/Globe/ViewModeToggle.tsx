@@ -3,10 +3,16 @@
  *
  * Provides a button to cycle between standard, concentration risk,
  * and disruption simulation view modes.
+ *
+ * Active modes render as a solid inverted block rather than a translucent tint,
+ * and the ⚠/⚡ glyphs are gone — the uppercase label plus the fill carries the
+ * state without depending on per-platform emoji metrics.
  */
 
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { color, surface, type } from '../ui/theme';
+import { HUD } from '../ui/layout';
 import type { ViewMode } from './types';
 
 export interface ViewModeToggleProps {
@@ -25,38 +31,23 @@ function getModeLabel(mode: ViewMode): string {
   }
 }
 
-function getModeIcon(mode: ViewMode): string {
-  switch (mode) {
-    case 'concentration-risk':
-      return '⚠';
-    case 'disruption':
-      return '⚡';
-    default:
-      return '⚠';
-  }
-}
-
 export const ViewModeToggle: React.FC<ViewModeToggleProps> = ({ viewMode, onToggle }) => {
   const isActive = viewMode !== 'standard';
   const isDisruption = viewMode === 'disruption';
+  const fill = isDisruption ? color.danger : color.warn;
 
   return (
     <TouchableOpacity
       style={[
+        surface.button,
         toggleStyles.button,
-        isActive && !isDisruption && toggleStyles.activeButton,
-        isDisruption && toggleStyles.disruptionButton,
+        isActive && { backgroundColor: fill, borderColor: fill },
       ]}
       onPress={onToggle}
       activeOpacity={0.7}
       testID="view-mode-toggle"
     >
-      <Text style={toggleStyles.icon}>{getModeIcon(viewMode)}</Text>
-      <Text style={[
-        toggleStyles.label,
-        isActive && !isDisruption && toggleStyles.activeLabel,
-        isDisruption && toggleStyles.disruptionLabel,
-      ]}>
+      <Text style={isActive ? type.buttonActiveLabel : type.button}>
         {getModeLabel(viewMode)}
       </Text>
     </TouchableOpacity>
@@ -65,37 +56,9 @@ export const ViewModeToggle: React.FC<ViewModeToggleProps> = ({ viewMode, onTogg
 
 const toggleStyles = StyleSheet.create({
   button: {
-    flexDirection: 'row',
+    minHeight: HUD.barHeight,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    gap: 6,
-  },
-  activeButton: {
-    backgroundColor: 'rgba(204, 0, 0, 0.3)',
-    borderColor: 'rgba(204, 0, 0, 0.6)',
-  },
-  disruptionButton: {
-    backgroundColor: 'rgba(255, 68, 68, 0.3)',
-    borderColor: 'rgba(255, 68, 68, 0.6)',
-  },
-  icon: {
-    fontSize: 14,
-  },
-  label: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  activeLabel: {
-    color: '#ff6666',
-  },
-  disruptionLabel: {
-    color: '#FF4444',
   },
 });
 

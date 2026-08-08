@@ -9,10 +9,12 @@
  */
 
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { color, space, type, surface } from '../ui/theme';
+import { useHudLayout } from '../ui/layout';
+import { ShapeCell } from '../ui/Shape';
+import type { ShapeKind } from '../ui/Shape';
 import type { DisruptionMetrics } from './types';
-
-const NARROW_BREAKPOINT = 600;
 
 export interface DisruptionPanelProps {
   metrics: DisruptionMetrics;
@@ -21,17 +23,21 @@ export interface DisruptionPanelProps {
 }
 
 /**
- * Type icon for disabled nodes
+ * Marker shape for disabled nodes
  */
-function typeIcon(type: string): string {
-  if (type === 'supplier') return '▲';
-  if (type === 'dc') return '■';
-  return '●';
+function typeShape(nodeType: string): ShapeKind {
+  if (nodeType === 'supplier') return 'triangle';
+  if (nodeType === 'dc') return 'square';
+  return 'dot';
 }
 
-function typeColor(type: string): string {
-  if (type === 'supplier') return '#FF9933';
-  if (type === 'dc') return '#003e5f';
+/** Reduced-supply / orphaned accents, shared by the metric tiles and lists. */
+const PARTIAL_COLOR = '#EE8800';
+const ORPHAN_COLOR = '#FF4444';
+
+function typeColor(nodeType: string): string {
+  if (nodeType === 'supplier') return '#FF9933';
+  if (nodeType === 'dc') return '#44AADD';
   return '#FF2244';
 }
 
@@ -40,8 +46,7 @@ export const DisruptionPanel: React.FC<DisruptionPanelProps> = ({
   visible,
   onResetAll,
 }) => {
-  const { width: screenWidth } = useWindowDimensions();
-  const isNarrow = screenWidth < NARROW_BREAKPOINT;
+  const { slot, isNarrow } = useHudLayout();
 
   if (!visible) return null;
 
@@ -49,7 +54,15 @@ export const DisruptionPanel: React.FC<DisruptionPanelProps> = ({
     metrics;
 
   return (
-    <View style={isNarrow ? panelStyles.containerNarrow : panelStyles.container}>
+    <View
+      style={[
+        surface.panel,
+        panelStyles.container,
+        isNarrow && panelStyles.containerNarrow,
+        slot('top-right'),
+      ]}
+      testID="disruption-panel"
+    >
       <ScrollView
         style={panelStyles.scroll}
         showsVerticalScrollIndicator={false}
@@ -94,9 +107,7 @@ export const DisruptionPanel: React.FC<DisruptionPanelProps> = ({
         <Text style={panelStyles.sectionTitle}>Disabled Nodes</Text>
         {disabledNodes.map((node) => (
           <View key={node.id} style={panelStyles.nodeRow}>
-            <Text style={[panelStyles.nodeIcon, { color: typeColor(node.type) }]}>
-              {typeIcon(node.type)}
-            </Text>
+            <ShapeCell kind={typeShape(node.type)} tint={typeColor(node.type)} />
             <Text style={panelStyles.nodeName} numberOfLines={1}>
               {node.name}
             </Text>
@@ -113,7 +124,7 @@ export const DisruptionPanel: React.FC<DisruptionPanelProps> = ({
         ) : (
           partiallyServedRestaurants.map((rest) => (
             <View key={rest.id} style={panelStyles.orphanRow}>
-              <Text style={panelStyles.partialDot}>●</Text>
+              <ShapeCell kind="dot" tint={PARTIAL_COLOR} />
               <Text style={panelStyles.partialName} numberOfLines={1}>
                 {rest.name}
               </Text>
@@ -128,7 +139,7 @@ export const DisruptionPanel: React.FC<DisruptionPanelProps> = ({
         ) : (
           orphanedRestaurants.map((rest) => (
             <View key={rest.id} style={panelStyles.orphanRow}>
-              <Text style={panelStyles.orphanDot}>●</Text>
+              <ShapeCell kind="dot" tint={ORPHAN_COLOR} />
               <Text style={panelStyles.orphanName} numberOfLines={1}>
                 {rest.name}
               </Text>
@@ -142,152 +153,108 @@ export const DisruptionPanel: React.FC<DisruptionPanelProps> = ({
 
 const panelStyles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
     width: 260,
     maxHeight: '60%',
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(204, 34, 34, 0.3)',
+    borderColor: color.danger,
     overflow: 'hidden',
   },
   containerNarrow: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
     width: 210,
     maxHeight: '50%',
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(204, 34, 34, 0.3)',
-    overflow: 'hidden',
   },
   scroll: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: space.sm + 2,
   },
   title: {
-    color: '#CC2222',
+    ...type.title,
+    color: color.danger,
+    flex: 1,
   },
   resetButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: 'rgba(204, 34, 34, 0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(204, 34, 34, 0.4)',
+    ...surface.button,
+    borderColor: color.danger,
+    paddingHorizontal: space.sm + 2,
+    paddingVertical: space.xs,
   },
   resetText: {
-    color: '#CC2222',
+    ...type.label,
     fontSize: 10,
-    fontWeight: '700',
+    color: color.danger,
   },
   metricsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 6,
+    marginBottom: space.md,
+    gap: space.xs + 2,
   },
   metricBox: {
+    ...surface.inset,
     flex: 1,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 8,
-    paddingVertical: 8,
+    paddingVertical: space.sm,
   },
   metricValue: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
+    ...type.metric,
   },
   metricLabel: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 9,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    ...type.label,
     letterSpacing: 0.5,
     marginTop: 2,
     textAlign: 'center',
   },
   orphanMetric: {
-    color: '#FF4444',
+    color: ORPHAN_COLOR,
   },
   partialMetric: {
-    color: '#EE8800',
+    color: PARTIAL_COLOR,
   },
   sectionTitle: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 9,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 6,
-    marginTop: 4,
+    ...type.label,
+    marginBottom: space.xs + 2,
+    marginTop: space.xs,
   },
   nodeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  nodeIcon: {
-    fontSize: 10,
-    width: 14,
-    textAlign: 'center',
+    gap: space.xs + 2,
+    marginBottom: space.xs,
   },
   nodeName: {
+    ...type.body,
     flex: 1,
-    color: '#ffffff',
-    fontSize: 11,
   },
   nodeType: {
-    color: 'rgba(255, 255, 255, 0.4)',
+    ...type.bodyDim,
     fontSize: 9,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   orphanRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: space.xs + 2,
     marginBottom: 3,
   },
-  orphanDot: {
-    color: '#FF4444',
-    fontSize: 8,
-    width: 14,
-    textAlign: 'center',
-  },
   orphanName: {
+    ...type.body,
     flex: 1,
-    color: '#FF4444',
-    fontSize: 11,
-  },
-  partialDot: {
-    color: '#EE8800',
-    fontSize: 8,
-    width: 14,
-    textAlign: 'center',
+    color: ORPHAN_COLOR,
   },
   partialName: {
+    ...type.body,
     flex: 1,
-    color: '#EE8800',
-    fontSize: 11,
+    color: PARTIAL_COLOR,
   },
   emptyText: {
-    color: 'rgba(255, 255, 255, 0.35)',
+    ...type.bodyDim,
     fontSize: 11,
-    fontStyle: 'italic',
-    marginBottom: 4,
+    marginBottom: space.xs,
   },
 });
 

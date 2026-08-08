@@ -9,7 +9,12 @@
  */
 
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { color, border, space, type, surface } from '../ui/theme';
+import { useHudLayout } from '../ui/layout';
+import { ShapeCell } from '../ui/Shape';
+import type { ShapeKind } from '../ui/Shape';
+import { CloseButton } from '../ui/CloseButton';
 import type {
   SelectedEntity,
   SelectedSupplier,
@@ -18,8 +23,6 @@ import type {
   SelectedCluster,
 } from './types';
 import { useSupplyChainData } from '../../hooks/queries/useSupplyChainData';
-
-const NARROW_BREAKPOINT = 600;
 
 export interface EntityDetailPanelProps {
   entity: SelectedEntity | null;
@@ -48,7 +51,7 @@ const SupplierDetail: React.FC<{ data: SelectedSupplier }> = ({ data }) => {
         const dest = locationsById.get(route.destId);
         return (
           <View key={route.id} style={s.routeRow}>
-            <Text style={s.routeArrow}>→</Text>
+            <ShapeCell kind="arrowRight" tint={ARROW_OUT_COLOR} />
             <Text style={s.routeName} numberOfLines={1}>
               {dest?.name ?? route.destId}
             </Text>
@@ -86,7 +89,7 @@ const DCDetail: React.FC<{ data: SelectedDC }> = ({ data }) => {
         const src = locationsById.get(route.sourceId);
         return (
           <View key={route.id} style={s.routeRow}>
-            <Text style={s.routeArrowIn}>←</Text>
+            <ShapeCell kind="arrowLeft" tint={ARROW_IN_COLOR} />
             <Text style={s.routeName} numberOfLines={1}>
               {src?.name ?? route.sourceId}
             </Text>
@@ -102,7 +105,7 @@ const DCDetail: React.FC<{ data: SelectedDC }> = ({ data }) => {
         const dest = locationsById.get(route.destId);
         return (
           <View key={route.id} style={s.routeRow}>
-            <Text style={s.routeArrow}>→</Text>
+            <ShapeCell kind="arrowRight" tint={ARROW_OUT_COLOR} />
             <Text style={s.routeName} numberOfLines={1}>
               {dest?.name ?? route.destId}
             </Text>
@@ -131,7 +134,7 @@ const RestaurantDetail: React.FC<{ data: SelectedRestaurant }> = ({ data }) => {
       <Text style={s.sectionTitle}>Serving DCs</Text>
       {data.servingDCs.map((dcName) => (
         <View key={dcName} style={s.routeRow}>
-          <Text style={s.routeArrowIn}>←</Text>
+          <ShapeCell kind="arrowLeft" tint={ARROW_IN_COLOR} />
           <Text style={s.routeName} numberOfLines={1}>
             {dcName}
           </Text>
@@ -143,7 +146,7 @@ const RestaurantDetail: React.FC<{ data: SelectedRestaurant }> = ({ data }) => {
         const src = locationsById.get(route.sourceId);
         return (
           <View key={route.id} style={s.routeRow}>
-            <Text style={s.routeArrowIn}>←</Text>
+            <ShapeCell kind="arrowLeft" tint={ARROW_IN_COLOR} />
             <Text style={s.routeName} numberOfLines={1}>
               {src?.name ?? route.sourceId}
             </Text>
@@ -174,19 +177,24 @@ function formatVolume(v: number): string {
   return v.toLocaleString();
 }
 
-function entityIcon(type: string): string {
-  if (type === 'supplier') return '▲';
-  if (type === 'dc') return '■';
-  if (type === 'cluster') return '◎';
-  return '●';
+function entityShape(entityType: string): ShapeKind {
+  if (entityType === 'supplier') return 'triangle';
+  if (entityType === 'dc') return 'square';
+  if (entityType === 'cluster') return 'diamond';
+  if (entityType === 'route') return 'arrowRight';
+  return 'dot';
 }
 
-function entityAccentColor(type: string): string {
-  if (type === 'supplier') return '#FF9933';
-  if (type === 'dc') return '#44AADD';
-  if (type === 'cluster') return '#FF4488';
+function entityAccentColor(entityType: string): string {
+  if (entityType === 'supplier') return '#FF9933';
+  if (entityType === 'dc') return '#44AADD';
+  if (entityType === 'cluster') return '#FF4488';
   return '#FF2244';
 }
+
+/** Direction accents for inbound/outbound route rows. */
+const ARROW_OUT_COLOR = '#FF9933';
+const ARROW_IN_COLOR = '#44AADD';
 
 const ClusterDetail: React.FC<{ data: SelectedCluster; onZoomIn?: () => void }> = ({
   data,
@@ -206,14 +214,14 @@ const ClusterDetail: React.FC<{ data: SelectedCluster; onZoomIn?: () => void }> 
           onPress={onZoomIn}
           activeOpacity={0.7}
         >
-          <Text style={s.zoomButtonText}>⊕  Zoom to Expand</Text>
+          <Text style={s.zoomButtonText}>Zoom to Expand</Text>
         </TouchableOpacity>
       )}
 
       <Text style={s.sectionTitle}>Restaurants ({data.memberCount})</Text>
       {data.memberNames.map((name, i) => (
         <View key={i} style={s.routeRow}>
-          <Text style={s.clusterDot}>●</Text>
+          <ShapeCell kind="dot" tint="#E60E33" />
           <Text style={s.routeName} numberOfLines={1}>
             {name}
           </Text>
@@ -225,7 +233,7 @@ const ClusterDetail: React.FC<{ data: SelectedCluster; onZoomIn?: () => void }> 
           <Text style={s.sectionTitle}>Serving DCs</Text>
           {data.servingDCs.map((dcName) => (
             <View key={dcName} style={s.routeRow}>
-              <Text style={s.routeArrowIn}>■</Text>
+              <ShapeCell kind="square" tint={ARROW_IN_COLOR} />
               <Text style={s.routeName} numberOfLines={1}>
                 {dcName}
               </Text>
@@ -244,8 +252,7 @@ export const EntityDetailPanel: React.FC<EntityDetailPanelProps> = ({
   onClose,
   onZoomToExpand,
 }) => {
-  const { width: screenWidth } = useWindowDimensions();
-  const isNarrow = screenWidth < NARROW_BREAKPOINT;
+  const { slot, isNarrow } = useHudLayout();
 
   if (!entity) return null;
 
@@ -255,7 +262,6 @@ export const EntityDetailPanel: React.FC<EntityDetailPanelProps> = ({
       : entity.location.name;
 
   const accent = entityAccentColor(entity.type);
-  const icon = entity.type === 'route' ? '⟶' : entityIcon(entity.type);
   const typeLabel =
     entity.type === 'dc'
       ? 'Distribution Center'
@@ -263,12 +269,17 @@ export const EntityDetailPanel: React.FC<EntityDetailPanelProps> = ({
       ? 'Metro Cluster'
       : entity.type.charAt(0).toUpperCase() + entity.type.slice(1);
 
-  const containerStyle = isNarrow
-    ? [s.containerNarrow, { borderColor: accent + '44' }]
-    : [s.container, { borderColor: accent + '44' }];
-
   return (
-    <View style={containerStyle}>
+    <View
+      style={[
+        surface.panel,
+        s.container,
+        isNarrow && s.containerNarrow,
+        { borderColor: accent },
+        slot(isNarrow ? 'sheet' : 'top-left'),
+      ]}
+      testID="entity-detail-panel"
+    >
       <ScrollView
         style={s.scroll}
         showsVerticalScrollIndicator={false}
@@ -276,7 +287,7 @@ export const EntityDetailPanel: React.FC<EntityDetailPanelProps> = ({
         {/* Header */}
         <View style={s.headerRow}>
           <View style={s.headerLeft}>
-            <Text style={[s.headerIcon, { color: accent }]}>{icon}</Text>
+            <ShapeCell kind={entityShape(entity.type)} tint={accent} />
             <View style={s.headerTextWrap}>
               <Text style={s.headerName} numberOfLines={1}>
                 {name}
@@ -286,13 +297,11 @@ export const EntityDetailPanel: React.FC<EntityDetailPanelProps> = ({
               </Text>
             </View>
           </View>
-          <TouchableOpacity
-            style={s.closeButton}
+          <CloseButton
             onPress={onClose}
-            activeOpacity={0.7}
-          >
-            <Text style={s.closeText}>✕</Text>
-          </TouchableOpacity>
+            accessibilityLabel="Close entity details"
+            testID="entity-detail-close"
+          />
         </View>
 
         {/* Coords */}
@@ -317,171 +326,103 @@ export const EntityDetailPanel: React.FC<EntityDetailPanelProps> = ({
 
 const s = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
     width: 270,
     maxHeight: '75%',
-    backgroundColor: 'rgba(0, 0, 0, 0.88)',
-    borderRadius: 12,
-    borderWidth: 1,
     overflow: 'hidden',
   },
   containerNarrow: {
-    position: 'absolute',
-    bottom: 80,
-    left: 10,
-    right: 10,
+    width: undefined,
     maxHeight: '45%',
-    backgroundColor: 'rgba(0, 0, 0, 0.92)',
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
   },
   scroll: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 6,
+    marginBottom: space.xs + 2,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: 8,
-  },
-  headerIcon: {
-    fontSize: 16,
+    gap: space.sm,
   },
   headerTextWrap: {
     flex: 1,
   },
   headerName: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
+    ...type.title,
+    textTransform: 'none',
   },
   headerType: {
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
+    ...type.label,
     letterSpacing: 0.8,
     marginTop: 1,
   },
-  closeButton: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  closeText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 12,
-    fontWeight: '700',
-  },
   coords: {
-    color: 'rgba(255, 255, 255, 0.35)',
-    fontSize: 10,
-    marginBottom: 10,
-    marginLeft: 24,
+    ...type.bodyDim,
+    color: color.textFaint,
+    marginBottom: space.sm + 2,
+    marginLeft: space.xl,
   },
   metricsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 6,
-    marginBottom: 8,
+    gap: space.xs + 2,
+    marginBottom: space.sm,
   },
   metricBox: {
+    ...surface.inset,
     flex: 1,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 8,
-    paddingVertical: 8,
+    paddingVertical: space.sm,
   },
   metricValue: {
-    color: '#ffffff',
+    ...type.metric,
     fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
   },
   metricLabel: {
-    color: 'rgba(255, 255, 255, 0.5)',
+    ...type.label,
     fontSize: 8,
-    fontWeight: '600',
-    textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginTop: 2,
     textAlign: 'center',
   },
   sectionTitle: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 9,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    ...type.label,
     marginBottom: 5,
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
-    paddingTop: 8,
+    marginTop: space.sm,
+    borderTopWidth: border.hair,
+    borderTopColor: color.lineDim,
+    paddingTop: space.sm,
   },
   routeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  routeArrow: {
-    color: '#FF9933',
-    fontSize: 11,
-    width: 14,
-    textAlign: 'center',
-    fontWeight: '700',
-  },
-  routeArrowIn: {
-    color: '#44AADD',
-    fontSize: 11,
-    width: 14,
-    textAlign: 'center',
-    fontWeight: '700',
+    gap: space.xs + 2,
+    marginBottom: space.xs,
   },
   routeName: {
+    ...type.body,
     flex: 1,
-    color: '#ffffff',
-    fontSize: 11,
   },
   routeVolume: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  zoomButton: {
-    backgroundColor: 'rgba(255, 68, 136, 0.15)',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 68, 136, 0.4)',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    marginVertical: 8,
-  },
-  zoomButtonText: {
-    color: '#FF4488',
-    fontSize: 13,
+    ...type.bodyDim,
     fontWeight: '700',
   },
-  clusterDot: {
-    color: '#E60E33',
-    fontSize: 6,
-    width: 14,
-    textAlign: 'center',
+  zoomButton: {
+    ...surface.button,
+    borderColor: '#FF4488',
+    paddingVertical: space.sm + 2,
+    alignItems: 'center',
+    marginVertical: space.sm,
+  },
+  zoomButtonText: {
+    ...type.button,
+    color: '#FF4488',
   },
 });
 

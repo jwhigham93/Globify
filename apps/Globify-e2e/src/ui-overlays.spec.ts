@@ -34,13 +34,18 @@ test.describe('UI Overlays', () => {
   });
 
   test('star spin toggle button is visible', async ({ page }) => {
-    // The pause icon is visible by default (stars are spinning)
-    await expect(page.getByText('⏸')).toBeVisible({ timeout: 5000 });
+    // The icon is drawn with Views rather than a glyph, so the control is
+    // identified by testID and its state read from the accessible label.
+    const toggle = page.getByTestId('spin-toggle');
+    await expect(toggle).toBeVisible({ timeout: 5000 });
+    // Stars spin by default, so the button offers "pause".
+    await expect(toggle).toHaveAttribute('aria-label', /Pause/);
   });
 
   test('controls hint is visible on initial load', async ({ page }) => {
+    // Copy differs between pointer and touch devices.
     await expect(
-      page.getByText('Scroll to zoom')
+      page.getByText(/(Scroll|Pinch) to zoom/)
     ).toBeVisible({ timeout: 5000 });
   });
 

@@ -1,9 +1,13 @@
 /**
  * TruckLayerToggle — small toggle button to show/hide the truck GPS layer.
+ *
+ * The 🚚 emoji is replaced with a drawn swatch: emoji render in a different
+ * font with different metrics on every platform, which misaligns the row.
  */
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
-import { TRUCK_COLOR_LIVE } from './constants';
+import { color, surface, type, space } from '../ui/theme';
+import { HUD } from '../ui/layout';
 
 interface TruckLayerToggleProps {
   visible: boolean;
@@ -18,17 +22,34 @@ export const TruckLayerToggle: React.FC<TruckLayerToggleProps> = ({
 }) => {
   return (
     <TouchableOpacity
-      style={[toggleStyles.button, visible && toggleStyles.active]}
+      style={[
+        surface.button,
+        toggleStyles.button,
+        visible && surface.buttonActive,
+      ]}
       onPress={onToggle}
       activeOpacity={0.7}
+      testID="truck-layer-toggle"
     >
-      <Text style={toggleStyles.icon}>🚚</Text>
+      <View
+        style={[
+          toggleStyles.swatch,
+          { backgroundColor: visible ? color.inverse : color.gps.live },
+        ]}
+      />
       <View>
-        <Text style={toggleStyles.label}>
+        <Text style={visible ? type.buttonActiveLabel : type.button}>
           {visible ? 'Hide' : 'Show'} Trucks
         </Text>
         {vehicleCount > 0 && (
-          <Text style={toggleStyles.count}>{vehicleCount} active</Text>
+          <Text
+            style={[
+              toggleStyles.count,
+              visible && { color: color.inverse },
+            ]}
+          >
+            {vehicleCount} active
+          </Text>
         )}
       </View>
     </TouchableOpacity>
@@ -39,28 +60,17 @@ const toggleStyles = StyleSheet.create({
   button: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    gap: space.sm,
+    minHeight: HUD.barHeight,
   },
-  active: {
-    borderColor: TRUCK_COLOR_LIVE,
-    backgroundColor: 'rgba(0, 230, 118, 0.15)',
-  },
-  icon: {
-    fontSize: 16,
-  },
-  label: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
+  swatch: {
+    width: 10,
+    height: 8,
   },
   count: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 10,
+    ...type.bodyDim,
+    fontSize: 9,
+    marginTop: 1,
   },
 });

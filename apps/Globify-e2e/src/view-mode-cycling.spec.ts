@@ -58,9 +58,9 @@ test.describe('View Mode Cycling', () => {
     await page.getByText('Risk View').click();
     await expect(page.getByText('Disruption').first()).toBeVisible({ timeout: 3000 });
 
-    // Instruction hint should be visible
+    // Instruction hint should be visible. Copy differs on touch devices.
     await expect(
-      page.getByText(/Click a supplier/)
+      page.getByText(/(Click|Tap) a supplier/)
     ).toBeVisible({ timeout: 3000 });
   });
 

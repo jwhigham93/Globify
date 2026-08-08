@@ -66,14 +66,16 @@ test.describe('Runtime Stability', () => {
     });
 
     await page.goto('/');
-    await expect(page.getByText('⏸')).toBeVisible({ timeout: 5000 });
+    // Drawn icon, no glyph: state is read from the accessible label.
+    const toggle = page.getByTestId('spin-toggle');
+    await expect(toggle).toHaveAttribute('aria-label', /Pause/, { timeout: 5000 });
 
     // Toggle pause/play twice
-    await page.getByText('⏸').click();
-    await expect(page.getByText('▶')).toBeVisible({ timeout: 2000 });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-label', /Resume/, { timeout: 2000 });
 
-    await page.getByText('▶').click();
-    await expect(page.getByText('⏸')).toBeVisible({ timeout: 2000 });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-label', /Pause/, { timeout: 2000 });
 
     expect(errors).toHaveLength(0);
   });

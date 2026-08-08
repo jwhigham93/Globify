@@ -78,6 +78,17 @@ cdk deploy --all -c profile=ultra-lite
 - **Auth**: AWS Cognito via `AuthProvider.tsx`; token is injected into `apiClient.ts` via `setTokenGetter`
 - **Real-time**: WebSocket GPS stream in `gpsStreamService.ts` → `useVehiclePositions.ts`
 - **View modes**: globe / flat-map / satellite — cycled via `ViewModeToggle`
+- **HUD overlays**: shared tokens in `src/components/ui/` — `theme.ts` (brutalist:
+  radius 0, opaque fills, hard borders, mono uppercase via `textTransform`),
+  `layout.ts` (single `NARROW_BREAKPOINT`, named anchor slots, safe-area insets).
+  Panels declare a slot; they never carry their own absolute offsets. Icons are
+  drawn with Views (`ui/Shape.tsx`), never glyphs — emoji and symbol characters
+  resolve to different fonts with different metrics per platform.
+- **Web HTML shell** is `apps/Globify/public/index.html` — Expo's Metro web
+  bundler reads the template from `public/`, substitutes `%LANG_ISO_CODE%` /
+  `%WEB_TITLE%`, and appends the bundle `<script>`. A `web/index.html` is *not*
+  read by anything. The `enhanceMiddleware` hook in `metro.config.js` no longer
+  runs on current Metro, so anything it injects is dead — put it in the template.
 
 ### Backend — `services/supply-chain-api`
 

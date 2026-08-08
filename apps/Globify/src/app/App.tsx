@@ -88,13 +88,11 @@ const AppContent = () => {
     <GlobeVisualization dataPoints={points} arcsData={arcs} testID="globe-visualization" />
   );
 
-  // On web, use a div container for proper iframe rendering
+  // On web, use a div container for proper iframe rendering. Sizing lives in
+  // the .globify-root class in web/index.html — an inline style cannot express
+  // the `height: 100%; height: 100dvh` fallback pair that iOS needs.
   if (Platform.OS === 'web') {
-    return (
-      <div style={{ width: '100vw', height: '100vh', backgroundColor: DEFAULT_BACKGROUND_COLOR }}>
-        {globeContent}
-      </div>
-    );
+    return <div className="globify-root">{globeContent}</div>;
   }
 
   // Native platforms use SafeAreaView

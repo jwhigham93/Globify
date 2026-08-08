@@ -47,15 +47,18 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'] },
     },
 
-    // Uncomment for mobile browsers support
-    /* {
+    // Mobile viewports: the HUD switches to its narrow/sheet arrangement below
+    // 600px, and overlay-layout.spec.ts asserts nothing collides or overflows
+    // there. Note these emulate the viewport, not iOS's collapsing toolbar —
+    // that still needs a manual pass on a real device.
+    {
       name: 'Mobile Chrome',
       use: { ...devices['Pixel 5'] },
     },
     {
       name: 'Mobile Safari',
       use: { ...devices['iPhone 12'] },
-    }, */
+    },
 
     // Uncomment for branded browsers
     /* {
