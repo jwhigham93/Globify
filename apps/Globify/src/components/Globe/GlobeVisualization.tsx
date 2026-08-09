@@ -473,16 +473,17 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
               near: CAMERA_NEAR,
               far: CAMERA_FAR
             }}
-            // R3F would otherwise default to dpr [1,2] with MSAA, which on a
-            // 3x phone is ~4x the fragment work every frame — enough to pin the
-            // GPU and thermally throttle the device within a minute.
-            dpr={[1, maxDpr]}
-            gl={{
-              antialias: !isTouch,
-              powerPreference: 'high-performance',
-              alpha: false,
-              stencil: false,
-            }}
+            // Touch devices only. R3F's defaults (dpr [1,2] with MSAA) are ~4x
+            // the fragment work on a 3x phone — enough to pin the GPU and
+            // thermally throttle within a minute. A desktop GPU does not need
+            // the help, and overriding the context there only risks pushing the
+            // driver onto a different, slower path, so it is left untouched.
+            dpr={isTouch ? [1, maxDpr] : undefined}
+            gl={
+              isTouch
+                ? { antialias: false, powerPreference: 'high-performance' }
+                : undefined
+            }
             style={styles.canvas}
           >
             <GlobeScene
