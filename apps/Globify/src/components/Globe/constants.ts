@@ -110,8 +110,6 @@ export const ZOOM_SLOWDOWN_DIST = 160;        // distance below which zoom start
 export const ROTATE_SPEED_FAR = 1.0;          // normal drag speed when far
 export const ROTATE_SPEED_NEAR = 0.2;         // slow drag speed near surface
 
-// OrbitControls inertia — makes touch rotation feel smooth on a phone.
-export const ORBIT_DAMPING_FACTOR = 0.08;
 // Dead zone (camera units) around a zoom-band threshold, so jitter while
 // sitting on the boundary can't oscillate the flag and thrash React.
 export const ZOOM_BAND_HYSTERESIS = 3;

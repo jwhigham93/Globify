@@ -13,7 +13,6 @@ import {
   ZOOM_SLOWDOWN_DIST,
   ROTATE_SPEED_FAR,
   ROTATE_SPEED_NEAR,
-  ORBIT_DAMPING_FACTOR,
 } from './constants';
 import { computeZoomBand, sameZoomBand } from '../../services/zoomBands';
 import type { ZoomBand } from '../../services/zoomBands';
@@ -45,10 +44,11 @@ export const Controls: React.FC<ControlsProps> = ({
     // camera orbits the origin. Rotate and zoom only.
     controls.enablePan = false;
     controls.enableRotate = true;
-    // Free under a continuous frame loop, and it is most of what makes touch
-    // rotation feel smooth on a phone.
-    controls.enableDamping = true;
-    controls.dampingFactor = ORBIT_DAMPING_FACTOR;
+    // Damping (inertia) is deliberately off. It was added here as a feel
+    // improvement for touch, but it keeps the camera drifting for a second
+    // after every release, which reads as the globe failing to keep up rather
+    // than as smoothness. Matches the pre-existing behaviour.
+    controls.enableDamping = false;
     controls.minDistance = ZOOM_MIN_DISTANCE;
     controls.maxDistance = ZOOM_MAX_DISTANCE;
     controlsRef.current = controls;
