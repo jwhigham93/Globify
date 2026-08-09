@@ -18,7 +18,7 @@ export interface SpinToggleProps {
   style?: object;
 }
 
-const SpinToggleImpl: React.FC<SpinToggleProps> = ({
+export const SpinToggle: React.FC<SpinToggleProps> = ({
   isSpinning,
   onToggle,
   style,
@@ -79,7 +79,5 @@ const iconStyles = StyleSheet.create({
   },
 });
 
-/** Memoized: the HUD re-renders on unrelated state changes. */
-export const SpinToggle = React.memo(SpinToggleImpl);
 
 export default SpinToggle;

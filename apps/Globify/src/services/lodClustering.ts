@@ -121,26 +121,23 @@ function computeSpread(points: DataPoint[]): { latSpread: number; lngSpread: num
 }
 
 /**
- * Apply LOD clustering to the globe data.
+ * Apply LOD clustering to the globe data based on current camera distance.
  *
- * When clustered (camera beyond LOD_CLUSTER_CAMERA_THRESHOLD):
+ * At far zoom (camera > threshold):
  *   - Restaurant groups sharing a metro code form aggregate cluster markers
  *   - Inbound arcs are redirected to cluster centroids and merged
  *   - Suppliers and DCs pass through untouched
  *
- * Otherwise all markers render individually (pass-through).
- *
- * Takes a boolean rather than a raw distance so the caller can hold it as a
- * quantized band: passing the distance meant a fresh result — and therefore a
- * full marker rebuild downstream — on every 1-unit camera change.
+ * At close zoom (camera ≤ threshold):
+ *   - All markers render individually (pass-through)
  */
 export function clusterByZoom(
   dataPoints: DataPoint[],
   arcsData: ArcData[],
-  clustered: boolean,
+  cameraDistance: number,
 ): ClusteredResult {
   // Close zoom — no clustering
-  if (!clustered) {
+  if (cameraDistance <= LOD_CLUSTER_CAMERA_THRESHOLD) {
     _lastClusters = [];
     return { dataPoints, arcsData };
   }
@@ -234,15 +231,12 @@ export function clusterByZoom(
   // (stroke widths summed).
 
   const mergedArcMap = new Map<string, ArcData>();
-  // Indexed rather than scanned: `clusters.find()` inside the per-arc loop made
-  // this O(arcs x clusters).
-  const clusterById = new Map(clusters.map((c) => [c.id, c]));
 
   for (const arc of arcsData) {
     const destClusterId = arc.destId ? memberToClusterId.get(arc.destId) : undefined;
-    const cluster = destClusterId ? clusterById.get(destClusterId) : undefined;
 
-    if (destClusterId && cluster) {
+    if (destClusterId) {
+      const cluster = clusters.find((c) => c.id === destClusterId)!;
       const key = `${arc.sourceId}→${destClusterId}`;
       const existing = mergedArcMap.get(key);
 

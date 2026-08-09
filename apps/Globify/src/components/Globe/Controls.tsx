@@ -14,41 +14,25 @@ import {
   ROTATE_SPEED_FAR,
   ROTATE_SPEED_NEAR,
 } from './constants';
-import { computeZoomBand, sameZoomBand } from '../../services/zoomBands';
-import type { ZoomBand } from '../../services/zoomBands';
 
 interface ControlsProps {
-  /** Fires only when a zoom band flips, not on every distance change. */
-  onZoomBandChange?: (band: ZoomBand) => void;
+  onZoomChange?: (distance: number) => void;
   /** When set, smoothly animate the camera to this distance */
   zoomTarget?: number | null;
   /** Called when the camera reaches the zoom target */
   onZoomTargetReached?: () => void;
 }
 
-export const Controls: React.FC<ControlsProps> = ({
-  onZoomBandChange,
-  zoomTarget,
-  onZoomTargetReached,
-}) => {
+export const Controls: React.FC<ControlsProps> = ({ onZoomChange, zoomTarget, onZoomTargetReached }) => {
   const { camera, gl } = useThree();
   const controlsRef = useRef<OrbitControls | null>(null);
-  const bandRef = useRef<ZoomBand | null>(null);
+  const lastDistance = useRef<number>(0);
 
   React.useEffect(() => {
     const controls = new OrbitControls(camera, gl.domElement);
     controls.enableZoom = true;
-    // Panning translates the orbit target off the origin, which silently
-    // invalidates every camera.position.length() reading in the app — LOD
-    // clustering, marker scale, tile zoom level and arc stroke all assume the
-    // camera orbits the origin. Rotate and zoom only.
-    controls.enablePan = false;
+    controls.enablePan = true;
     controls.enableRotate = true;
-    // Damping (inertia) is deliberately off. It was added here as a feel
-    // improvement for touch, but it keeps the camera drifting for a second
-    // after every release, which reads as the globe failing to keep up rather
-    // than as smoothness. Matches the pre-existing behaviour.
-    controls.enableDamping = false;
     controls.minDistance = ZOOM_MIN_DISTANCE;
     controls.maxDistance = ZOOM_MAX_DISTANCE;
     controlsRef.current = controls;
@@ -59,36 +43,34 @@ export const Controls: React.FC<ControlsProps> = ({
   }, [camera, gl]);
 
   useFrame(() => {
-    const controls = controlsRef.current;
-    if (!controls) return;
-
-    // Smooth zoom animation toward target distance
-    if (zoomTarget != null) {
-      const currentDist = camera.position.length();
-      if (Math.abs(currentDist - zoomTarget) < 2) {
-        onZoomTargetReached?.();
-      } else {
-        const newDist = currentDist + (zoomTarget - currentDist) * 0.06;
-        camera.position.normalize().multiplyScalar(newDist);
+    if (controlsRef.current) {
+      // Smooth zoom animation toward target distance
+      if (zoomTarget != null) {
+        const currentDist = camera.position.length();
+        if (Math.abs(currentDist - zoomTarget) < 2) {
+          onZoomTargetReached?.();
+        } else {
+          const newDist = currentDist + (zoomTarget - currentDist) * 0.06;
+          camera.position.normalize().multiplyScalar(newDist);
+        }
       }
+
+      controlsRef.current.update();
+      // Report distance changes (rounded to avoid excessive re-renders)
+      const dist = Math.round(camera.position.length());
+      if (dist !== lastDistance.current) {
+        lastDistance.current = dist;
+        onZoomChange?.(dist);
+      }
+
+      // Adaptive zoom speed — slow down as we approach the surface
+      const rawDist = camera.position.length();
+      const t = Math.max(0, Math.min(1,
+        (rawDist - ZOOM_MIN_DISTANCE) / (ZOOM_SLOWDOWN_DIST - ZOOM_MIN_DISTANCE),
+      ));
+      controlsRef.current.zoomSpeed = ZOOM_SPEED_NEAR + t * (ZOOM_SPEED_FAR - ZOOM_SPEED_NEAR);
+      controlsRef.current.rotateSpeed = ROTATE_SPEED_NEAR + t * (ROTATE_SPEED_FAR - ROTATE_SPEED_NEAR);
     }
-
-    controls.update();
-
-    const dist = camera.position.length();
-
-    const nextBand = computeZoomBand(dist, bandRef.current ?? undefined);
-    if (!bandRef.current || !sameZoomBand(bandRef.current, nextBand)) {
-      bandRef.current = nextBand;
-      onZoomBandChange?.(nextBand);
-    }
-
-    // Adaptive zoom speed — slow down as we approach the surface
-    const t = Math.max(0, Math.min(1,
-      (dist - ZOOM_MIN_DISTANCE) / (ZOOM_SLOWDOWN_DIST - ZOOM_MIN_DISTANCE),
-    ));
-    controls.zoomSpeed = ZOOM_SPEED_NEAR + t * (ZOOM_SPEED_FAR - ZOOM_SPEED_NEAR);
-    controls.rotateSpeed = ROTATE_SPEED_NEAR + t * (ROTATE_SPEED_FAR - ROTATE_SPEED_NEAR);
   });
 
   return null;

@@ -31,7 +31,7 @@ function getModeLabel(mode: ViewMode): string {
   }
 }
 
-const ViewModeToggleImpl: React.FC<ViewModeToggleProps> = ({ viewMode, onToggle }) => {
+export const ViewModeToggle: React.FC<ViewModeToggleProps> = ({ viewMode, onToggle }) => {
   const isActive = viewMode !== 'standard';
   const isDisruption = viewMode === 'disruption';
   const fill = isDisruption ? color.danger : color.warn;
@@ -62,7 +62,5 @@ const toggleStyles = StyleSheet.create({
   },
 });
 
-/** Memoized: the HUD re-renders on unrelated state changes. */
-export const ViewModeToggle = React.memo(ViewModeToggleImpl);
 
 export default ViewModeToggle;

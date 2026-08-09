@@ -41,7 +41,7 @@ function typeColor(nodeType: string): string {
   return '#FF2244';
 }
 
-const DisruptionPanelImpl: React.FC<DisruptionPanelProps> = ({
+export const DisruptionPanel: React.FC<DisruptionPanelProps> = ({
   metrics,
   visible,
   onResetAll,
@@ -260,7 +260,5 @@ const panelStyles = StyleSheet.create({
   },
 });
 
-/** Memoized: the HUD re-renders on unrelated state changes. */
-export const DisruptionPanel = React.memo(DisruptionPanelImpl);
 
 export default DisruptionPanel;

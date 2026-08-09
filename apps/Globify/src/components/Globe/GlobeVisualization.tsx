@@ -10,16 +10,14 @@ import React, { useState, useMemo, useCallback, useEffect, Suspense } from 'reac
 import { View, Platform, Text } from 'react-native';
 import { Canvas } from '@react-three/fiber';
 import type { GlobeVisualizationProps, ViewMode, DataPoint, SelectedEntity, NetworkRiskMetrics, DisruptionMetrics, RoutePathSegment } from './types';
-import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, DPR_MAX_TOUCH, DPR_MAX_DESKTOP, ROUTE_PATH_COMPLETED_STROKE, ROUTE_PATH_REMAINING_STROKE, TRUCK_COLOR_LIVE, TRUCK_COLOR_STALE, TRUCK_COLOR_LOST } from './constants';
+import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, CONTROLS_HINT_HIDE_DISTANCE, ROUTE_PATH_COMPLETED_STROKE, ROUTE_PATH_REMAINING_STROKE, TRUCK_COLOR_LIVE, TRUCK_COLOR_STALE, TRUCK_COLOR_LOST } from './constants';
 import { styles } from './styles';
 import { LoadingFallback } from './LoadingFallback';
 import { GlobeScene } from './GlobeScene';
 import { GlobeErrorBoundary } from './GlobeErrorBoundary';
 import { GlobeHud } from './GlobeHud';
 import { Loader } from '../ui/Loader';
-import { computeZoomBand } from '../../services/zoomBands';
-import type { ZoomBand } from '../../services/zoomBands';
-import { HudContext, useIsTouch } from '../ui/layout';
+import { HudContext } from '../ui/layout';
 import type { HudState } from '../ui/layout';
 import { applyRiskColorsToPoints, applyRiskColorsToArcs } from '../../services/riskVisuals';
 import { applyDisruptionToPoints, applyDisruptionToArcs } from '../../services/disruptionVisuals';
@@ -77,18 +75,10 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
   // selections are driven by selectedLocationId + the entity-detail query below.
   const [selectedEntity, setSelectedEntity] = useState<SelectedEntity | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
-  // Only the two booleans the UI actually branches on, not the raw distance.
-  // Reporting every 1-unit change re-rendered this whole tree ~70 times per
-  // zoom sweep, each render re-clustering the dataset and rebuilding markers.
-  const [zoomBand, setZoomBand] = useState<ZoomBand>(() =>
-    computeZoomBand(
-      Math.sqrt(CAMERA_POSITION[0] ** 2 + CAMERA_POSITION[1] ** 2 + CAMERA_POSITION[2] ** 2),
-    ),
+  const [cameraDistance, setCameraDistance] = useState<number>(
+    Math.round(Math.sqrt(CAMERA_POSITION[0] ** 2 + CAMERA_POSITION[1] ** 2 + CAMERA_POSITION[2] ** 2))
   );
   const [zoomTarget, setZoomTarget] = useState<number | null>(null);
-
-  const isTouch = useIsTouch();
-  const maxDpr = isTouch ? DPR_MAX_TOUCH : DPR_MAX_DESKTOP;
 
   // ── Truck GPS layer ──────────────────────────────────────────────
   const [showTrucks, setShowTrucks] = useState(false);
@@ -226,17 +216,21 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
 
   // LOD clustering — aggregate nearby restaurants at far zoom
   const { dataPoints: lodDataPoints, arcsData: lodArcsData } = useMemo(
-    () => clusterByZoom(dataPoints, arcsData, zoomBand.lodClustered),
-    [dataPoints, arcsData, zoomBand.lodClustered],
+    () => clusterByZoom(dataPoints, arcsData, cameraDistance),
+    [dataPoints, arcsData, cameraDistance],
   );
 
   // When zooming past the cluster threshold while a cluster is selected,
   // clear the selection so individual markers appear normally (same as "Zoom to Expand").
   useEffect(() => {
-    if (!zoomBand.lodClustered && selectedEntity?.type === 'cluster') {
+    if (
+      selectedEntity &&
+      selectedEntity.type === 'cluster' &&
+      cameraDistance < LOD_CLUSTER_CAMERA_THRESHOLD
+    ) {
       setSelectedEntity(null);
     }
-  }, [zoomBand.lodClustered, selectedEntity]);
+  }, [cameraDistance, selectedEntity]);
 
   // Derive risk-colored arcs when in concentration-risk view
   const effectiveArcsData = useMemo(() => {
@@ -473,17 +467,6 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
               near: CAMERA_NEAR,
               far: CAMERA_FAR
             }}
-            // Touch devices only. R3F's defaults (dpr [1,2] with MSAA) are ~4x
-            // the fragment work on a 3x phone — enough to pin the GPU and
-            // thermally throttle within a minute. A desktop GPU does not need
-            // the help, and overriding the context there only risks pushing the
-            // driver onto a different, slower path, so it is left untouched.
-            dpr={isTouch ? [1, maxDpr] : undefined}
-            gl={
-              isTouch
-                ? { antialias: false, powerPreference: 'high-performance' }
-                : undefined
-            }
             style={styles.canvas}
           >
             <GlobeScene
@@ -495,9 +478,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
               isStarsSpinning={isStarsSpinning}
               onPointClick={handlePointClick}
               onBackgroundClick={handleCloseEntity}
-              onZoomBandChange={setZoomBand}
-              maxDpr={maxDpr}
-              isTouchDevice={isTouch}
+              onZoomChange={setCameraDistance}
               zoomTarget={zoomTarget}
               onZoomTargetReached={handleZoomTargetReached}
               tileCdnUrl={config.resolvedTileCdnUrl}
@@ -520,7 +501,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
           vehicleCount={vehiclePositions.size}
           failedQueries={failedQueries}
           showDisruptionHint={viewMode === 'disruption' && disabledNodeIds.size === 0}
-          showControlsHint={zoomBand.showHint}
+          showControlsHint={cameraDistance > CONTROLS_HINT_HIDE_DISTANCE}
           networkRiskMetrics={networkRiskMetrics}
           riskPanelVisible={viewMode === 'concentration-risk' && isRiskSuccess}
           disruptionMetrics={disruptionMetrics}

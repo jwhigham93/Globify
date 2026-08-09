@@ -82,19 +82,6 @@ export const CAMERA_NEAR = 1;
 // magnified patch of it, which is the look this scene was tuned around.
 export const CAMERA_FAR = 50000;
 
-// Renderer resolution caps. R3F defaults to dpr [1, 2] with antialiasing, which
-// on a 3x phone is ~4x the fragment work plus an MSAA resolve every frame — the
-// GPU pins, the device thermally throttles, and the framerate never recovers.
-export const DPR_MAX_TOUCH = 1.25;
-export const DPR_MAX_DESKTOP = 2;
-/** Floor for the adaptive downscale when frames run long. */
-export const DPR_MIN = 0.75;
-/** Rolling window (frames) used to judge sustained frame cost. */
-export const DPR_SAMPLE_FRAMES = 60;
-/** Mean frame time above which resolution steps down (~45fps). */
-export const DPR_DOWNSCALE_MS = 22;
-/** Mean frame time below which resolution steps back up (~77fps). */
-export const DPR_UPSCALE_MS = 13;
 
 // Zoom limits (camera distance from origin)
 export const ZOOM_MIN_DISTANCE = 102;  // Closest zoom — extended for tile detail
@@ -110,9 +97,6 @@ export const ZOOM_SLOWDOWN_DIST = 160;        // distance below which zoom start
 export const ROTATE_SPEED_FAR = 1.0;          // normal drag speed when far
 export const ROTATE_SPEED_NEAR = 0.2;         // slow drag speed near surface
 
-// Dead zone (camera units) around a zoom-band threshold, so jitter while
-// sitting on the boundary can't oscillate the flag and thrash React.
-export const ZOOM_BAND_HYSTERESIS = 3;
 
 // Progressive tile loading thresholds (camera distance)
 export const TILE_ZOOM_THRESHOLD_Z1 = 140; // Below this distance, load z1 tiles
@@ -171,15 +155,7 @@ export const TRUCK_SCALE_MULTIPLIER = 0.7;
 
 // Arc stroke zoom scaling — arcs thin out when zoomed in
 export const ARC_STROKE_SCALE_MIN = 0.55;     // stroke multiplier at closest zoom
-// Rebuilding an arc's stroke regenerates its TubeGeometry, so the scale is
-// quantized into this many bands and only rebuilt on a band change once the
-// camera has settled — never during a gesture.
-export const ARC_STROKE_BANDS = 3;
-export const ARC_SETTLE_MS = 200;              // camera-still delay before rebuilding
 
-// Marker rescaling is driven by camera distance, which is constant while
-// rotating — skip the whole pass unless the distance actually moved.
-export const MARKER_SCALE_EPSILON = 0.5;
 
 // Truck pulse animation (live status glow)
 export const TRUCK_PULSE_MIN_SCALE = 1.0;

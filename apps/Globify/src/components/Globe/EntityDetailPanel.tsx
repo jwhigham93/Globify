@@ -247,7 +247,7 @@ const ClusterDetail: React.FC<{ data: SelectedCluster; onZoomIn?: () => void }> 
 
 // ── Main Panel ─────────────────────────────────────────────────────────────
 
-const EntityDetailPanelImpl: React.FC<EntityDetailPanelProps> = ({
+export const EntityDetailPanel: React.FC<EntityDetailPanelProps> = ({
   entity,
   onClose,
   onZoomToExpand,
@@ -429,7 +429,5 @@ const s = StyleSheet.create({
   },
 });
 
-/** Memoized: the HUD re-renders on unrelated state changes. */
-export const EntityDetailPanel = React.memo(EntityDetailPanelImpl);
 
 export default EntityDetailPanel;

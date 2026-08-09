@@ -26,7 +26,7 @@ const statusColors: Record<string, string> = {
   lost: TRUCK_COLOR_LOST,
 };
 
-const TruckDetailPanelImpl: React.FC<TruckDetailPanelProps> = ({
+export const TruckDetailPanel: React.FC<TruckDetailPanelProps> = ({
   vehicle,
   onClose,
 }) => {
@@ -203,5 +203,3 @@ const panelStyles = StyleSheet.create({
   },
 });
 
-/** Memoized: the HUD re-renders on unrelated state changes. */
-export const TruckDetailPanel = React.memo(TruckDetailPanelImpl);

@@ -31,7 +31,7 @@ const LegendRow: React.FC<{ kind: ShapeKind; tint: string; label: string }> = ({
   </View>
 );
 
-const LegendPanelImpl: React.FC<LegendPanelProps> = ({ viewMode }) => {
+export const LegendPanel: React.FC<LegendPanelProps> = ({ viewMode }) => {
   const isRiskMode = viewMode === 'concentration-risk';
   const isDisruptionMode = viewMode === 'disruption';
 
@@ -136,7 +136,5 @@ const legendStyles = StyleSheet.create({
   },
 });
 
-/** Memoized: the HUD re-renders on unrelated state changes. */
-export const LegendPanel = React.memo(LegendPanelImpl);
 
 export default LegendPanel;
