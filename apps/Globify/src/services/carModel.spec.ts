@@ -6,6 +6,7 @@ import {
   buildCarGeometry,
   createCarMesh,
   setCarColor,
+  setCarHaloStrength,
   disposeCarMesh,
   disposeCarResources,
   shortestAngleDelta,
@@ -87,8 +88,38 @@ describe('createCarMesh', () => {
     setCarColor(car, TRUCK_COLOR_LOST);
     const lost = new THREE.Color(TRUCK_COLOR_LOST).getHexString();
     expect(car.__bodyMaterial.color.getHexString()).toBe(lost);
-    expect(car.__bodyMaterial.emissive.getHexString()).toBe(lost);
     expect(car.__haloMaterial.color.getHexString()).toBe(lost);
+    disposeCarMesh(car);
+  });
+
+  it('does not tint with emissive, which would wash out the vertex masks', () => {
+    // vertexColors multiplies the diffuse term only. An emissive tint is
+    // applied uniformly, so the dark glass and wheels would glow as brightly
+    // as the body and the model would flatten into a coloured blob.
+    const car = createCarMesh(TRUCK_COLOR_LIVE);
+    expect(car.__bodyMaterial.emissiveIntensity * car.__bodyMaterial.emissive.getHex()).toBe(0);
+    disposeCarMesh(car);
+  });
+
+  it('fades the halo as the camera zooms in', () => {
+    const car = createCarMesh(TRUCK_COLOR_LIVE);
+
+    setCarHaloStrength(car, 1); // fully zoomed out
+    const far = car.__haloMaterial.opacity;
+    expect(far).toBeGreaterThan(0);
+
+    setCarHaloStrength(car, 0); // fully zoomed in — must not smother the car
+    expect(car.__haloMaterial.opacity).toBe(0);
+
+    setCarHaloStrength(car, 0.5);
+    expect(car.__haloMaterial.opacity).toBeCloseTo(far / 2, 5);
+
+    // Out-of-range input is clamped rather than producing invalid opacity.
+    setCarHaloStrength(car, 3);
+    expect(car.__haloMaterial.opacity).toBe(far);
+    setCarHaloStrength(car, -1);
+    expect(car.__haloMaterial.opacity).toBe(0);
+
     disposeCarMesh(car);
   });
 

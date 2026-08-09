@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useMemo, useCallback, useEffect, Suspense } from 'react';
-import { View, Platform, Text, ActivityIndicator } from 'react-native';
+import { View, Platform, Text } from 'react-native';
 import { Canvas } from '@react-three/fiber';
 import type { GlobeVisualizationProps, ViewMode, DataPoint, SelectedEntity, NetworkRiskMetrics, DisruptionMetrics, RoutePathSegment } from './types';
 import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, DPR_MAX_TOUCH, DPR_MAX_DESKTOP, ROUTE_PATH_COMPLETED_STROKE, ROUTE_PATH_REMAINING_STROKE, TRUCK_COLOR_LIVE, TRUCK_COLOR_STALE, TRUCK_COLOR_LOST } from './constants';
@@ -16,6 +16,7 @@ import { LoadingFallback } from './LoadingFallback';
 import { GlobeScene } from './GlobeScene';
 import { GlobeErrorBoundary } from './GlobeErrorBoundary';
 import { GlobeHud } from './GlobeHud';
+import { Loader } from '../ui/Loader';
 import { computeZoomBand } from '../../services/zoomBands';
 import type { ZoomBand } from '../../services/zoomBands';
 import { HudContext, useIsTouch } from '../ui/layout';
@@ -460,8 +461,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
       {/* Show loading overlay while texture is downloading */}
       {isTextureLoading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#ffffff" />
-          <Text style={styles.loadingText}>Loading Earth texture...</Text>
+          <Loader label="Loading Earth texture..." />
         </View>
       )}
       <GlobeErrorBoundary>

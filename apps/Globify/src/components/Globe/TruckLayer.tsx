@@ -24,6 +24,7 @@ import * as THREE from 'three';
 import {
   createCarMesh,
   setCarColor,
+  setCarHaloStrength,
   disposeCarMesh,
   disposeCarResources,
   smoothAngle,
@@ -105,6 +106,11 @@ export const TruckLayer: React.FC<TruckLayerProps> = ({
 
   // Reconcile the vehicle set. This only writes targets — no React state, and
   // no work proportional to anything but the number of vehicles that changed.
+  //
+  // `isReady` is a dependency even though it is not read: positions usually
+  // arrive before the globe finishes initialising, and without it this effect
+  // bails on a null group and never re-runs (the position map does not change
+  // again), leaving the layer permanently empty.
   useEffect(() => {
     const group = groupRef.current;
     if (!group) return;
@@ -156,7 +162,7 @@ export const TruckLayer: React.FC<TruckLayerProps> = ({
       disposeCarMesh(state.car);
       states.delete(id);
     }
-  }, [vehiclePositions]);
+  }, [vehiclePositions, isReady]);
 
   useFrame(({ camera, clock }, delta) => {
     const group = groupRef.current;
@@ -206,6 +212,7 @@ export const TruckLayer: React.FC<TruckLayerProps> = ({
       state.car.scale.setScalar(
         computePulseScale(state.status, elapsed) * baseScale * boost,
       );
+      setCarHaloStrength(state.car, zoomT);
     }
   });
 

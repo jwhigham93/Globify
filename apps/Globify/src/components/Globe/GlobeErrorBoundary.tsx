@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { color, space, type, surface } from '../ui/theme';
 
 interface Props {
   children: React.ReactNode;
@@ -63,14 +64,14 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   button: {
-    backgroundColor: 'rgba(220,50,50,0.8)',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 8,
+    ...surface.button,
+    backgroundColor: color.danger,
+    borderColor: color.danger,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.sm + 2,
   },
   buttonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
+    ...type.buttonActiveLabel,
+    color: color.text,
   },
 });

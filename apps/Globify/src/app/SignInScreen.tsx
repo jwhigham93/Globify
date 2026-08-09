@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { color, space, type, surface } from '../components/ui/theme';
 import { useAuth } from './AuthProvider';
 
 export const SignInScreen: React.FC = () => {
@@ -33,48 +34,44 @@ export const SignInScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: color.bg,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
   card: {
+    ...surface.panel,
     width: '100%',
     maxWidth: 360,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 16,
     padding: 32,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
   },
   title: {
+    ...type.title,
     fontSize: 28,
-    fontWeight: '700',
-    color: '#fff',
-    marginBottom: 4,
+    marginBottom: space.xs,
   },
   subtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.5)',
+    ...type.body,
+    color: color.textDim,
     marginBottom: 40,
   },
   googleButton: {
+    ...surface.button,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    gap: 12,
+    backgroundColor: color.line,
+    borderColor: color.line,
+    paddingVertical: space.md,
+    paddingHorizontal: space.xl,
+    gap: space.md,
   },
   googleIcon: {
     width: 20,
     height: 20,
   },
   googleButtonText: {
-    color: '#3c4043',
-    fontSize: 15,
-    fontWeight: '600',
+    ...type.button,
+    color: color.inverse,
   },
 });

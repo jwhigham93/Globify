@@ -34,9 +34,13 @@ export function useVehiclePositions(
   const [connected, setConnected] = useState(false);
   const serviceRef = useRef<GpsStreamService | null>(null);
 
-  // Load initial positions from REST endpoint
+  // Load initial positions from REST endpoint.
+  //
+  // No guard on an empty base URL: apiClient composes `${baseUrl}/api/v1...`
+  // unconditionally, so an empty base means same-origin, which is how the rest
+  // of the app loads data in dev. Bailing out here instead made the vehicle
+  // layer silently unreachable whenever API_BASE_URL was unset.
   useEffect(() => {
-    if (!apiBaseUrl) return;
     let cancelled = false;
 
     const token = getToken();
@@ -47,7 +51,7 @@ export function useVehiclePositions(
     fetch(`${apiBaseUrl}/api/v1/vehicles/positions`, { headers })
       .then((res) => (res.ok ? res.json() : []))
       .then((data: PositionUpdate[]) => {
-        if (cancelled) return;
+        if (cancelled || !Array.isArray(data)) return;
         const map = new Map<string, VehiclePosition>();
         for (const p of data) {
           map.set(p.vehicleId, { ...p, updatedAt: Date.now() });

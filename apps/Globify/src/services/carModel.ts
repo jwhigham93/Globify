@@ -59,51 +59,77 @@ function paint(geometry: THREE.BufferGeometry, mask: THREE.Color): THREE.BufferG
   return geometry;
 }
 
+/**
+ * Narrow a box toward +Y by pulling its front vertices inward.
+ *
+ * A tapered plan view is the clearest "which way is forward" cue from directly
+ * above, and doing it by moving vertices is exact — an earlier attempt used a
+ * rotated cylinder and produced a flap sticking out at 45°, because rotating a
+ * Y-axis cylinder about Z tilts it in plane instead of aligning its faces.
+ */
+function taperFront(geometry: THREE.BufferGeometry, factor: number): THREE.BufferGeometry {
+  const pos = geometry.attributes.position as THREE.BufferAttribute;
+  let maxY = -Infinity;
+  let minY = Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    maxY = Math.max(maxY, pos.getY(i));
+    minY = Math.min(minY, pos.getY(i));
+  }
+  const span = maxY - minY || 1;
+  for (let i = 0; i < pos.count; i++) {
+    const t = (pos.getY(i) - minY) / span; // 0 at the tail, 1 at the nose
+    pos.setX(i, pos.getX(i) * (1 - t * (1 - factor)));
+  }
+  pos.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 /** Build the merged car geometry. Exported for testing; use `getCarGeometry()`. */
 export function buildCarGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
+  const deckZ = CAR_WHEEL_HEIGHT * 0.5;
 
-  // Body — the main slab, sitting just above the surface.
+  // Body — the main slab, tapered toward the nose.
   const body = new THREE.BoxGeometry(CAR_BODY_WIDTH, CAR_BODY_LENGTH, CAR_BODY_HEIGHT);
-  body.translate(0, 0, CAR_BODY_HEIGHT / 2 + CAR_WHEEL_HEIGHT * 0.5);
+  taperFront(body, 0.72);
+  body.translate(0, 0, CAR_BODY_HEIGHT / 2 + deckZ);
   parts.push(paint(body, MASK_BODY));
 
-  // Cabin — a 4-sided frustum (a cylinder with 4 radial segments, tapered).
-  // The taper is what makes the silhouette read as a car rather than two
-  // stacked bricks when viewed from a high orbit.
+  // Cabin — a 4-sided frustum: a cylinder stood up along +Z (rotateX) and
+  // turned 45° about that same axis so its flat faces align with the body,
+  // then stretched along the travel direction. The taper is what makes the
+  // silhouette read as a car rather than two stacked bricks from a high orbit.
   const cabin = new THREE.CylinderGeometry(
     CAR_CABIN_TOP_WIDTH,
     CAR_CABIN_BOTTOM_WIDTH,
     CAR_CABIN_HEIGHT,
     4,
   );
-  // Cylinder runs along +Y; stand it up along +Z, then turn 45° so its four
-  // flat faces line up with the body rather than its corners.
   cabin.rotateX(Math.PI / 2);
   cabin.rotateZ(Math.PI / 4);
   cabin.scale(1, CAR_CABIN_LENGTH / CAR_CABIN_BOTTOM_WIDTH, 1);
   cabin.translate(
     0,
-    -CAR_BODY_LENGTH * 0.04,
-    CAR_BODY_HEIGHT + CAR_CABIN_HEIGHT / 2 + CAR_WHEEL_HEIGHT * 0.5,
+    -CAR_BODY_LENGTH * 0.08,
+    CAR_BODY_HEIGHT + CAR_CABIN_HEIGHT / 2 + deckZ,
   );
   parts.push(paint(cabin, MASK_GLASS));
 
-  // Nose wedge — a short taper at +Y so the facing direction stays legible
-  // even when the car is only a few pixels tall.
-  const nose = new THREE.CylinderGeometry(
-    CAR_BODY_WIDTH * 0.22,
-    CAR_BODY_WIDTH * 0.46,
-    CAR_BODY_LENGTH * 0.18,
-    4,
+  // Hood — a lower, narrower deck ahead of the cabin. Sitting below the cabin
+  // roofline is what separates front from back at a glance.
+  const hood = new THREE.BoxGeometry(
+    CAR_BODY_WIDTH * 0.78,
+    CAR_BODY_LENGTH * 0.3,
+    CAR_BODY_HEIGHT * 0.5,
   );
-  nose.rotateZ(Math.PI / 4);
-  nose.translate(
+  taperFront(hood, 0.8);
+  hood.translate(
     0,
-    CAR_BODY_LENGTH * 0.5 + CAR_BODY_LENGTH * 0.07,
-    CAR_BODY_HEIGHT / 2 + CAR_WHEEL_HEIGHT * 0.5,
+    CAR_BODY_LENGTH * 0.3,
+    CAR_BODY_HEIGHT + CAR_BODY_HEIGHT * 0.25 + deckZ,
   );
-  parts.push(paint(nose, MASK_BODY));
+  parts.push(paint(hood, MASK_BODY));
 
   // Wheels.
   const wheelX = CAR_BODY_WIDTH * 0.5;
@@ -181,12 +207,15 @@ export function createCarMesh(statusColor: string): CarMesh {
   const group = new THREE.Group() as CarMesh;
   const color = new THREE.Color(statusColor);
 
+  // No emissive. `vertexColors` multiplies the *diffuse* term only, so an
+  // emissive tint is applied uniformly and washes the masks out — the dark
+  // glass and wheels end up glowing as brightly as the body, flattening the
+  // model into a coloured blob. Scene ambient is strong enough on its own, and
+  // the halo below carries the status glow.
   const bodyMaterial = new THREE.MeshStandardMaterial({
     color,
-    emissive: color,
-    emissiveIntensity: 0.45,
-    roughness: 0.5,
-    metalness: 0.3,
+    roughness: 0.55,
+    metalness: 0.25,
     vertexColors: true,
   });
   group.add(new THREE.Mesh(getCarGeometry(), bodyMaterial));
@@ -213,8 +242,16 @@ export function createCarMesh(statusColor: string): CarMesh {
 /** Recolor an existing car in place. */
 export function setCarColor(car: CarMesh, statusColor: string): void {
   car.__bodyMaterial.color.set(statusColor);
-  car.__bodyMaterial.emissive.set(statusColor);
   car.__haloMaterial.color.set(statusColor);
+}
+
+/**
+ * Fade the halo with zoom. It exists so a car-sized mesh stays findable from
+ * orbit; up close it is larger than the car and hides the model it is meant to
+ * advertise, so it gets out of the way. `zoomT` is 1 when fully zoomed out.
+ */
+export function setCarHaloStrength(car: CarMesh, zoomT: number): void {
+  car.__haloMaterial.opacity = CAR_HALO_OPACITY * Math.max(0, Math.min(1, zoomT));
 }
 
 /** Dispose a single car's materials. Geometry is shared and stays alive. */
