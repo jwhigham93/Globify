@@ -164,7 +164,9 @@ const panelStyles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: space.md,
-    paddingVertical: space.md,
+    paddingTop: space.md,
+    // Rows carry a bottom margin; a full pad here would stack with it.
+    paddingBottom: space.md - space.xs,
   },
   headerRow: {
     flexDirection: 'row',

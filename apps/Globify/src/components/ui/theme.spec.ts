@@ -22,12 +22,16 @@ describe('theme', () => {
     }
   });
 
-  it('uses opaque panel fills rather than translucency', () => {
-    const panel = StyleSheet.flatten(surface.panel) as {
-      backgroundColor?: string;
-    };
+  it('lets the scene show through panel fills', () => {
+    // Opaque fills made every panel read as a black slab pasted over the globe.
+    // Brutalism here is carried by the square corners and hard borders instead.
+    const panel = StyleSheet.flatten(surface.panel) as { backgroundColor?: string };
     expect(panel.backgroundColor).toBe(color.surface);
-    expect(panel.backgroundColor).not.toMatch(/rgba/);
+
+    const alpha = /rgba\([^)]*,\s*([\d.]+)\)/.exec(color.surface)?.[1];
+    expect(alpha).toBeDefined();
+    expect(Number(alpha)).toBeGreaterThan(0.5);
+    expect(Number(alpha)).toBeLessThan(1);
   });
 
   it('draws panel borders at full contrast', () => {

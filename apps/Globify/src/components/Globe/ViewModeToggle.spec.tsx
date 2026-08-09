@@ -60,7 +60,7 @@ describe('ViewModeToggle', () => {
     const { getByTestId: getStd } = render(
       <ViewModeToggle viewMode="standard" onToggle={jest.fn()} />
     );
-    expect(flatBackground(getStd('view-mode-toggle'))).toBe(color.bg);
+    expect(flatBackground(getStd('view-mode-toggle'))).toBe(color.buttonFill);
 
     const { getByTestId: getRisk } = render(
       <ViewModeToggle viewMode="concentration-risk" onToggle={jest.fn()} />

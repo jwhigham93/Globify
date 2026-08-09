@@ -161,7 +161,10 @@ const panelStyles = StyleSheet.create({
     maxHeight: '55%',
   },
   scroll: {
-    padding: space.md,
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+    // Item rows carry a bottom margin; a full pad here would stack with it.
+    paddingBottom: space.xs,
   },
   title: {
     ...type.title,

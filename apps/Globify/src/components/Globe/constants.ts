@@ -76,10 +76,11 @@ export const MARKER_CLUSTER_GLOW_INTENSITY = 2.0;
 export const CAMERA_POSITION: [number, number, number] = [-196, 105, -17];
 export const CAMERA_FOV = 75;
 export const CAMERA_NEAR = 1;
-// The star field is a scene.background, not a 20000-unit sphere, so the far
-// plane only has to clear the globe. A 50000:1 depth range wrecked precision
-// for the small surface markers.
-export const CAMERA_FAR = 2000;
+// Must clear STAR_SPHERE_RADIUS. Swapping the star sphere for a
+// scene.background would allow a much nearer far plane and better depth
+// precision, but it changes how the star texture projects — the sphere shows a
+// magnified patch of it, which is the look this scene was tuned around.
+export const CAMERA_FAR = 50000;
 
 // Renderer resolution caps. R3F defaults to dpr [1, 2] with antialiasing, which
 // on a 3x phone is ~4x the fragment work plus an MSAA resolve every frame — the
@@ -177,10 +178,6 @@ export const ARC_STROKE_SCALE_MIN = 0.55;     // stroke multiplier at closest zo
 // camera has settled — never during a gesture.
 export const ARC_STROKE_BANDS = 3;
 export const ARC_SETTLE_MS = 200;              // camera-still delay before rebuilding
-// Tube resolution. three-globe defaults to 64x6 per arc; a quarter of that is
-// indistinguishable at max zoom and cuts vertex count ~4x across 234 arcs.
-export const ARC_CURVE_RESOLUTION = 32;
-export const ARC_CIRCULAR_RESOLUTION = 4;
 
 // Marker rescaling is driven by camera distance, which is constant while
 // rotating — skip the whole pass unless the distance actually moved.

@@ -23,7 +23,7 @@ export const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: color.bg,
+    backgroundColor: color.surfaceSolid,
     zIndex: Z.loading,
   },
   loadingText: {

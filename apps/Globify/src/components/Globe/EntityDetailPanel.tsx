@@ -336,7 +336,10 @@ const s = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: space.md,
-    paddingVertical: space.md,
+    paddingTop: space.md,
+    // Rows carry a bottom margin, so a full `space.md` here stacks with the
+    // last one and leaves a visibly empty band under the final entry.
+    paddingBottom: space.md - space.xs,
   },
   headerRow: {
     flexDirection: 'row',

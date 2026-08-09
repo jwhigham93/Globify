@@ -496,6 +496,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
               onBackgroundClick={handleCloseEntity}
               onZoomBandChange={setZoomBand}
               maxDpr={maxDpr}
+              isTouchDevice={isTouch}
               zoomTarget={zoomTarget}
               onZoomTargetReached={handleZoomTargetReached}
               tileCdnUrl={config.resolvedTileCdnUrl}

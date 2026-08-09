@@ -149,15 +149,23 @@ export function useHudLayout(): HudLayout {
 }
 
 /**
- * Whether the device takes touch input.
+ * Whether the device's *primary* input is touch.
  *
  * `Platform.OS !== 'web'` is false in mobile Safari, so it cannot be used to
  * decide between "tap" and "click" copy for phone browser users.
+ *
+ * `navigator.maxTouchPoints > 0` is the wrong test: it is true on any Windows
+ * laptop or monitor with a touchscreen, which are ordinary desktops driven by
+ * a mouse. That misread also downgraded renderer quality on those machines,
+ * since the pixel-ratio cap and antialiasing switch key off this value.
+ * `(pointer: coarse)` asks about the primary pointer, which is what we mean.
  */
 export function useIsTouch(): boolean {
   if (Platform.OS !== 'web') return true;
-  if (typeof navigator === 'undefined') return false;
-  return navigator.maxTouchPoints > 0;
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  return window.matchMedia('(pointer: coarse)').matches;
 }
 
 export { ZERO_INSETS };

@@ -193,6 +193,8 @@ export interface CarMesh extends THREE.Group {
   __bodyMaterial: THREE.MeshStandardMaterial;
   /** Flat ground halo, so the vehicle stays findable when zoomed out. */
   __haloMaterial: THREE.MeshBasicMaterial;
+  /** The halo mesh, hidden outright once it has faded to nothing. */
+  __halo: THREE.Mesh;
 }
 
 /**
@@ -236,6 +238,7 @@ export function createCarMesh(statusColor: string): CarMesh {
 
   group.__bodyMaterial = bodyMaterial;
   group.__haloMaterial = haloMaterial;
+  group.__halo = halo;
   return group;
 }
 
@@ -251,7 +254,10 @@ export function setCarColor(car: CarMesh, statusColor: string): void {
  * advertise, so it gets out of the way. `zoomT` is 1 when fully zoomed out.
  */
 export function setCarHaloStrength(car: CarMesh, zoomT: number): void {
-  car.__haloMaterial.opacity = CAR_HALO_OPACITY * Math.max(0, Math.min(1, zoomT));
+  const opacity = CAR_HALO_OPACITY * Math.max(0, Math.min(1, zoomT));
+  car.__haloMaterial.opacity = opacity;
+  // A fully transparent quad still costs a sorted, blended draw. Skip it.
+  car.__halo.visible = opacity > 0.01;
 }
 
 /** Dispose a single car's materials. Geometry is shared and stays alive. */

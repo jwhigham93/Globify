@@ -38,8 +38,6 @@ import {
   ARC_STROKE_SCALE_MIN,
   ARC_STROKE_BANDS,
   ARC_SETTLE_MS,
-  ARC_CURVE_RESOLUTION,
-  ARC_CIRCULAR_RESOLUTION,
   MARKER_SCALE_EPSILON,
   ROUTE_PATH_ALTITUDE,
   ROUTE_PATH_DASH_LENGTH,
@@ -92,6 +90,8 @@ export interface GlobeSceneProps {
   routePathData?: RoutePathSegment[];
   /** Ceiling for the adaptive pixel ratio. */
   maxDpr: number;
+  /** Enables adaptive downscaling; desktop GPUs opt out. */
+  isTouchDevice: boolean;
 }
 
 /**
@@ -250,6 +250,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   onTruckClick,
   routePathData = [],
   maxDpr,
+  isTouchDevice,
 }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const globeRef = useRef<any>(null);
@@ -258,7 +259,8 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   const { scene, camera, gl } = useThree();
   const setFrameloop = useThree((state) => state.setFrameloop);
 
-  useAdaptiveDpr(maxDpr);
+  // Adaptive downscaling is for thermally-limited devices only.
+  useAdaptiveDpr(maxDpr, isTouchDevice);
 
   // Track ALL object meshes for per-frame zoom scaling
   const objectMeshesRef = useRef<Map<string, THREE.Object3D>>(new Map());
@@ -351,11 +353,10 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
           return marker;
         })
         // Arc configuration for supply chain visualization.
-        // Resolution must be set before data is pushed — both are
-        // triggerUpdate:false in three-globe, so they only take effect on the
-        // next arcsData() call.
-        .arcCurveResolution(ARC_CURVE_RESOLUTION)
-        .arcCircularResolution(ARC_CIRCULAR_RESOLUTION)
+        // Tube resolution is left at three-globe's defaults (64 x 6): lowering
+        // it visibly faceted the arcs, and it was never where the cost was —
+        // that was rebuilding every tube mid-gesture, which the settle-and-band
+        // throttle in the frame loop below handles instead.
         .arcsData(arcsData)
         .arcStartLat((d: object) => (d as ArcData).startLat)
         .arcStartLng((d: object) => (d as ArcData).startLng)

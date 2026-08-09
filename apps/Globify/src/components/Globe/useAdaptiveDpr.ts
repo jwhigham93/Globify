@@ -9,6 +9,10 @@
  *
  * Hysteresis (a longer confirmation window on the way up than down) and a
  * per-step cap keep it from oscillating between two resolutions.
+ *
+ * Touch devices only. `setPixelRatio` reallocates the drawing buffer, so on a
+ * desktop GPU that never needs the help this can only cost — a stray downscale
+ * softens the image and the resize itself hitches.
  */
 import { useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
@@ -26,7 +30,7 @@ const SLOW_WINDOWS_TO_DROP = 2;
 /** Consecutive fast windows before stepping up — deliberately slower to react. */
 const FAST_WINDOWS_TO_RAISE = 4;
 
-export function useAdaptiveDpr(maxDpr: number): void {
+export function useAdaptiveDpr(maxDpr: number, enabled: boolean): void {
   const gl = useThree((state) => state.gl);
 
   const frames = useRef(0);
@@ -36,6 +40,7 @@ export function useAdaptiveDpr(maxDpr: number): void {
   const current = useRef(maxDpr);
 
   useFrame((_state, delta) => {
+    if (!enabled) return;
     frames.current += 1;
     elapsedMs.current += delta * 1000;
     if (frames.current < DPR_SAMPLE_FRAMES) return;

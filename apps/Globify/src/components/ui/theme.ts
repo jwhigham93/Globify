@@ -1,9 +1,13 @@
 /**
  * Brutalist UI tokens for the globe HUD.
  *
- * The look: zero corner radius, opaque fills, hard high-contrast borders,
- * monospace uppercase labels, and solid inverted blocks for active states
- * instead of translucent tints.
+ * The look: zero corner radius, hard high-contrast borders, monospace
+ * uppercase labels, and solid inverted blocks for active states.
+ *
+ * Fills stay translucent. Squaring everything off *and* making it opaque turned
+ * each panel into a black slab pasted over the globe; the corners in particular
+ * read as unexplained boxes. The square corners and hard borders carry the
+ * style on their own.
  *
  * Two rules that are load-bearing elsewhere:
  *  - Uppercasing is done with `textTransform`, never by uppercasing source
@@ -28,8 +32,16 @@ export const RADIUS = 0 as const;
 
 export const color = {
   bg: '#000000',
-  surface: '#0A0A0A',
-  surfaceAlt: '#161616',
+  // Fills are translucent on purpose. Fully opaque panels read as black slabs
+  // pasted over the scene — the globe and stars should still show through.
+  // Brutalism here comes from the square corners and hard borders, not from
+  // blocking out what is behind.
+  surface: 'rgba(6, 6, 6, 0.74)',
+  surfaceAlt: 'rgba(30, 30, 30, 0.6)',
+  /** Opaque variant, for the full-screen loading cover. */
+  surfaceSolid: '#0A0A0A',
+  /** Fill for inactive buttons. */
+  buttonFill: 'rgba(0, 0, 0, 0.6)',
 
   line: '#FFFFFF',
   lineDim: '#4A4A4A',
@@ -163,7 +175,7 @@ export const surface = StyleSheet.create({
     borderRadius: RADIUS,
   },
   button: {
-    backgroundColor: color.bg,
+    backgroundColor: color.buttonFill,
     borderWidth: border.hair,
     borderColor: color.line,
     borderRadius: RADIUS,
