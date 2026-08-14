@@ -2,20 +2,30 @@
 
 A Go REST API for supply chain visualization, risk computation, and disruption simulation. Built with Go 1.26, chi v5, PostgreSQL 17 (via pgx/v5 + sqlc), and Cognito JWT authentication.
 
+> Part of the [Globify](../../README.md) monorepo. For the "why" behind the
+> architecture (including the two WebSocket hub implementations below) see
+> [`ENGINEERING_NOTES.md`](../../ENGINEERING_NOTES.md); for AWS deployment
+> see [`infra/cdk/README.md`](../../infra/cdk/README.md).
+
 ## Architecture
 
 ```
 cmd/server/          → Server entrypoint (graceful shutdown, config)
 internal/
   api/               → HTTP handlers, router, health checks
-  auth/              → Cognito JWT middleware (JWKS caching)
+  auth/              → Cognito JWT middleware (JWKS caching), WS ticket auth
   db/                → sqlc-generated queries + connection pool
   disruption/        → Disruption simulation engine
   models/            → Domain types (locations, routes, risk, entity)
   risk/              → Risk computation (supplier, DC, restaurant, network)
+  ws/                → WebSocket hub — in-memory fan-out (App Runner / EKS)
+  wshub/             → WebSocket hub — API Gateway + DynamoDB (Lambda)
 migrations/          → PostgreSQL schema & seed data
 sqlc/                → sqlc configuration
 ```
+
+`main.go` picks between `ws` and `wshub` at startup based on whether
+`DYNAMODB_WS_TABLE` is set — the same binary runs on every deploy profile.
 
 ## API Endpoints
 
@@ -46,11 +56,17 @@ sqlc/                → sqlc configuration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
+| `DATABASE_URL` | Yes* | — | PostgreSQL connection string. *Not needed if `SSM_DATABASE_URL` is set. |
+| `SSM_DATABASE_URL` | No | — | Name of an AWS SSM SecureString parameter to read `DATABASE_URL` from at cold start. Used in place of `DATABASE_URL` on Lambda (`ultra-lite`); see `infra/cdk/README.md`. |
 | `PORT` | No | `8080` | HTTP listen port |
 | `ALLOWED_ORIGINS` | No | `*` | Comma-separated CORS origins |
 | `COGNITO_USER_POOL_ID` | No | — | AWS Cognito User Pool ID (auth bypassed if empty) |
 | `COGNITO_CLIENT_ID` | No | — | AWS Cognito App Client ID |
+| `COGNITO_REGION` | No | — | AWS region of the Cognito User Pool |
+| `AUTH_DISABLED` | No | — | Set to `true` to force-bypass auth (local dev only) |
+| `DYNAMODB_WS_TABLE` | No | — | DynamoDB table name for WebSocket connection IDs. Selects the Lambda WS hub (`internal/wshub`) when set; unset selects the in-memory hub (`internal/ws`). |
+| `APIGW_WS_ENDPOINT` | No | — | API Gateway WebSocket callback URL, used to push messages back to clients. Required alongside `DYNAMODB_WS_TABLE`. |
+| `GPS_SIM_TOKEN` | No | — | Shared secret required in the EventBridge GPS-simulator payload (Lambda only) |
 | `LOG_FORMAT` | No | `console` | Set to `json` for structured JSON logs |
 
 ## Local Development

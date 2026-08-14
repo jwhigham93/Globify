@@ -2,6 +2,10 @@
 
 Infrastructure as Code (IaC) for deploying the Supply Chain API to AWS using CDK (Go).
 
+> Part of the [Globify](../../README.md) monorepo. For the reasoning behind
+> each profile — why `ultra-lite` uses Lambda + DynamoDB + Neon instead of a
+> scaled-down `full` — see [`ENGINEERING_NOTES.md`](../../ENGINEERING_NOTES.md).
+
 ## Deployment Profiles
 
 Three profiles target different cost/capability tradeoffs:
@@ -72,25 +76,49 @@ cdk deploy --all -c profile=ultra-lite  # side project (default)
 
 ### Ultra-lite Profile
 
+No VPC — Lambda has no persistent process, so it can't hold WebSocket
+connections in memory the way the other two profiles do. Connection state
+moves to DynamoDB instead; see `ENGINEERING_NOTES.md` for the full request
+sequence.
+
 ```
-┌───────────────────────────────┐
-│  Lambda (x86_64, 256 MB)      │
-│  ┌─────────────────────────┐  │
-│  │ Lambda Web Adapter      │  │
-│  │ → Go HTTP server        │  │
-│  └─────────────────────────┘  │
-│  API Gateway HTTP API (HTTPS) │
-└───────────────────────────────┘
-          │
-          ▼ (internet)
-  ┌───────────────────┐
-  │  Neon Free Tier   │
-  │  PostgreSQL 17    │
-  │  (0.5 GB, ext.)   │
-  └───────────────────┘
+┌────────────────────────┐      ┌──────────────────────────┐
+│  API Gateway HTTP API  │      │  API Gateway WebSocket API │
+│  (REST, HTTPS)         │      │  ($connect/$disconnect/    │
+│                        │      │   $default)                │
+└───────────┬────────────┘      └─────────────┬─────────────┘
+            │                                  │
+            └────────────────┬─────────────────┘
+                              ▼
+              ┌─────────────────────────────┐
+              │  Lambda (x86_64, 256 MB)    │
+              │  Lambda Web Adapter          │
+              │  → Go HTTP server            │
+              └───────────────┬───────────────┘
+                    │                    │
+                    ▼                    ▼ (internet, TLS)
+        ┌─────────────────────┐  ┌───────────────────┐
+        │  DynamoDB            │  │  Neon Free Tier   │
+        │  ws-connections      │  │  PostgreSQL 17    │
+        │  (connectionId, TTL) │  │  (0.5 GB, ext.)   │
+        └─────────────────────┘  └───────────────────┘
+                    ▲
+                    │ every 2 min
+        ┌─────────────────────┐
+        │  EventBridge         │
+        │  (GPS simulator tick)│
+        └─────────────────────┘
 
   + S3/CloudFront (web) · ECR · Cognito
 ```
+
+- **DynamoDB** (`ws-connections` table) holds nothing but ephemeral
+  `connectionId → expiresAt` rows — pay-per-request billing, TTL
+  auto-expires stale connections. It exists only because Lambda can't keep
+  connections in memory; it is not a database for app data.
+- **Neon** is still the system of record — suppliers, routes, risk data,
+  and one-time WebSocket auth tickets. See "Why Neon instead of RDS" and
+  "Why DynamoDB too" in `ENGINEERING_NOTES.md` for the full reasoning.
 
 ## CDK Stacks
 
@@ -103,7 +131,7 @@ cdk deploy --all -c profile=ultra-lite  # side project (default)
 | **SupplyChainSecurity** | Full, Lite | WAF Web ACLs (REGIONAL + CLOUDFRONT) | ACL ARNs |
 | **SupplyChainCluster** | Full | EKS, node group, ALB Controller, IRSA | Cluster endpoint |
 | **SupplyChainAppRunner** | Lite | App Runner, VPC connector, auto-deploy | Service URL |
-| **SupplyChainLambdaApi** | Ultra-lite | Lambda (zip asset), API Gateway HTTP API | API Gateway HTTP API |
+| **SupplyChainLambdaApi** | Ultra-lite | Lambda (zip asset), API Gateway HTTP API, API Gateway WebSocket API, DynamoDB (`ws-connections`) | HTTP API endpoint, WebSocket URL |
 | **GlobifyWebHosting** | All | S3 bucket, CloudFront, OAI | CloudFront URL |
 | **SupplyChainBudget** | All | Budget alarms (80%, 100%, forecast) | — |
 
@@ -355,7 +383,10 @@ cdk bootstrap aws://ACCOUNT_ID/us-east-1   # first time only
 cdk deploy --all -c profile=ultra-lite
 ```
 
-This deploys only: Auth, ECR, Lambda, S3/CloudFront, and Budget (no VPC, RDS, or WAF).
+This deploys: Auth, ECR, Lambda + API Gateway (HTTP + WebSocket) + DynamoDB,
+S3/CloudFront, and Budget (no VPC, RDS, or WAF). The DynamoDB table and both
+API Gateway APIs are created and wired automatically — no manual setup step
+below is needed for them.
 
 ### 3. Build and push Lambda container image
 
@@ -413,7 +444,8 @@ Same as Full Profile step 5 (S3 sync + CloudFront invalidation).
 
 ### 7. Update Globify config
 
-Point `API_BASE_URL` to the API Gateway HTTP API endpoint from CDK outputs.
+Point `API_BASE_URL` to the `ApiGatewayUrl` CDK output, and
+`EXPO_PUBLIC_WS_URL` to the `WebSocketUrl` CDK output.
 
 ---
 
@@ -450,6 +482,8 @@ Point `API_BASE_URL` to the API Gateway HTTP API endpoint from CDK outputs.
 | Resource | Monthly Cost |
 |----------|-------------|
 | Lambda | $0 (free tier: 1M req, 400K GB-s) |
+| API Gateway (HTTP + WebSocket) | ~$0-1 (free tier: 1M HTTP calls; WS billed per message + connection-minute) |
+| DynamoDB (`ws-connections`, pay-per-request) | $0 (free tier: 25 GB, 200M requests/mo) |
 | Neon PostgreSQL | $0 (free tier: 0.5 GB) |
 | S3 + CloudFront | ~$1 |
 | ECR | < $1 |

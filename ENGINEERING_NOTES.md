@@ -1,82 +1,247 @@
 # Engineering Notes
 
-Globify is a 3D globe visualization of a QSR (quick-service restaurant) supply chain — suppliers, distribution centers, restaurants, delivery routes, live truck GPS — built as a way to get real depth in Go, AWS CDK, Expo/React Native, and WebGL by building something that was actually interesting to look at. Globe-style visualizations (Google Earth, Mapbox GL, CesiumJS) always seemed like magic from the outside; this project is an attempt at a sliver of that magic from scratch, and it left a lot more respect for how much engineering sits underneath "zoom into a map."
+A 3D globe showing a QSR (quick-service restaurant) supply chain — suppliers,
+distribution centers, restaurants, live truck GPS, and disruption/risk
+overlays. Built to get real depth in Go, AWS CDK, Expo/React Native, and
+WebGL by building something worth looking at.
 
-These notes are the story behind the code: the constraints that shaped it, the problems that took longest to solve, and an honest account of what's finished versus still in flight.
+## What It Does
 
-## What it does
+- 3D globe with supplier/DC/restaurant points and animated, volume-weighted
+  flow arcs.
+- **Concentration risk** — flags suppliers providing >30% of a DC's inbound
+  volume (single-point-of-failure risk a plain map wouldn't show).
+- **Disruption simulation** — disable a node, watch reachability recompute
+  and reroute live.
+- Live truck GPS over WebSocket, backed by a simulator when no real fleet
+  is plugged in.
+- Google sign-in via Cognito. Three view modes: globe / flat-map / satellite.
 
-- A 3D globe with supplier/DC/restaurant points and animated, volume-weighted arcs showing flow through the supply chain.
-- A **concentration risk** view — suppliers providing more than 30% of inbound volume to a distribution center are flagged, surfacing single-point-of-failure risk a plain map wouldn't show.
-- **Disruption simulation** — disable a node, watch the network recompute reachability and reroute in real time.
-- Click-to-inspect detail panels, platform-adaptive (slide-in on web, bottom sheet on mobile).
-- Live truck GPS over WebSocket, with a simulator driving realistic movement when there's no real fleet to plug in.
-- Google sign-in via Cognito Hosted UI.
-- Three view modes — globe, flat-map, satellite.
+## Stack
 
-## Architecture
+| Layer | Tech |
+|---|---|
+| Frontend | Expo 54 (React Native + web), Three.js via `react-three-fiber`, custom GLSL tile shader |
+| Backend | Go 1.26, chi, pgx, sqlc |
+| Database | Postgres (Neon, serverless) |
+| Infra | AWS CDK v2 (Go), 3 deployment profiles behind one context flag |
+| Data fetching | TanStack Query |
 
-React Native/Expo 54 on the frontend (Three.js via `react-three-fiber`, a custom GLSL tile shader) talking to a Go 1.26 API (chi, pgx, sqlc) backed by Postgres (Neon on the cheapest deploy tier). Infrastructure is AWS CDK v2, written in Go, with three interchangeable deployment profiles behind a single context flag — same domain code, different cost:
+## Deployment Profiles
 
-| Profile | Stack | Cost |
-|---|---|---|
-| `full` | EKS + RDS + NAT Gateway + WAF | ~$196/mo |
-| `lite` | App Runner + RDS + NAT instance + WAF | ~$25/mo |
-| `ultra-lite` | Lambda + API Gateway + Neon (external DB) | ~$1–3/mo |
+Same domain code, three cost tiers, picked with `-c profile=<name>`:
 
-Here's what `lite` actually looks like end to end — it's the profile that's easiest to reason about because it still runs a persistent process, unlike `ultra-lite`:
+| Profile | Compute | DB | Cost |
+|---|---|---|---|
+| `full` | EKS | RDS | ~$196/mo |
+| `lite` | App Runner | RDS | ~$25/mo |
+| **`ultra-lite`** ← *this is what's deployed* | Lambda | Neon | ~$1–3/mo |
+
+---
+
+## `full` — production shape
 
 ```mermaid
 flowchart TB
-    Mobile["Expo app\n(iOS / Android)"]
+    Mobile["Expo app"]
     Web["Web client"]
-    Cognito["Cognito User Pool\n(Google Hosted UI)"]
-    CF["CloudFront + S3\nstatic web hosting"]
-    WAF["WAF\nrate limiting"]
+    Cognito["Cognito User Pool"]
+    CF["CloudFront + S3"]
 
-    subgraph VPC
-        API["App Runner\nGo API — 0.25 vCPU / 0.5GB"]
-        NAT["NAT instance"]
-        RDS[("RDS Postgres 16\ndb.t4g.micro")]
+    subgraph VPC["VPC (2 AZs)"]
+        ALB["ALB + WAF"]
+        EKS["EKS · API pods (2-6)"]
+        NAT["NAT Gateway"]
+        RDS[("RDS Postgres 16")]
     end
 
     Web -->|HTTPS| CF
-    Mobile -->|"HTTPS + WSS"| WAF
-    Web -->|"HTTPS + WSS"| WAF
+    Mobile -->|HTTPS + WSS| ALB
+    Web -->|HTTPS + WSS| ALB
+    ALB --> EKS
+    EKS --> RDS
+    EKS -.->|egress| NAT
+    Mobile & Web -.->|OAuth| Cognito
+    EKS -.->|verify JWT| Cognito
+```
+
+Everything is a long-lived process: EKS pods hold WebSocket connections in
+memory, RDS is always-on. Fully managed, highly available, expensive.
+
+## `lite` — staging/demo shape
+
+```mermaid
+flowchart TB
+    Mobile["Expo app"]
+    Web["Web client"]
+    Cognito["Cognito User Pool"]
+    CF["CloudFront + S3"]
+    WAF["WAF · rate limiting"]
+
+    subgraph VPC
+        API["App Runner · Go API"]
+        NAT["NAT instance (t4g.nano)"]
+        RDS[("RDS Postgres 16")]
+    end
+
+    Web -->|HTTPS| CF
+    Mobile -->|HTTPS + WSS| WAF
+    Web -->|HTTPS + WSS| WAF
     WAF --> API
     API --> RDS
     API -.->|egress| NAT
-    Mobile -.->|OAuth redirect| Cognito
-    Web -.->|OAuth redirect| Cognito
-    API -.->|verify JWT via JWKS| Cognito
+    Mobile & Web -.->|OAuth| Cognito
+    API -.->|verify JWT| Cognito
 ```
 
-`ultra-lite` swaps App Runner for Lambda and RDS for Neon, and — because Lambda has no persistent process — swaps the WebSocket layer entirely. Those swaps, and why the cheap tier can't just be the expensive one scaled down, are the more interesting story, below.
+Still one persistent process (App Runner container), so it still holds
+WebSocket connections in memory just like `full`. The only swaps are managed
+→ cheap building blocks: NAT Gateway → NAT instance, EKS → App Runner.
 
-## Problems worth talking about
+## `ultra-lite` — what we actually run
 
-### Metro couldn't bundle three.js for web
+Lambda has **no persistent process**, so it can't hold WebSocket connections
+in memory the way `full`/`lite` do. That one constraint reshapes both the
+real-time layer and the database choice below.
 
-Expo's Metro bundler doesn't support `import.meta` (used internally by three.js) and by default runs out of heap bundling `three` + `three-globe` for web. Two fixes, both still in place: `babel-plugin-transform-import-meta` in `apps/Globify/babel.config.js` transpiles away `import.meta` (tracked upstream as `expo/expo#30323`), and the web serve target runs with `NODE_OPTIONS=--max-old-space-size=8192` so the bundler doesn't OOM at the default ~4GB heap. The alternatives considered before landing on this stack — plain Three.js, `react-globe.gl`'s WebView approach — are in `openspec/changes/archive/2026-03-14-migrate-globe-spec-to-openspec/design.md`.
+```mermaid
+flowchart TB
+    Mobile["Expo app"]
+    Web["Web client"]
+    Cognito["Cognito User Pool"]
+    CF["CloudFront + S3"]
+    HttpApi["API Gateway · HTTP API"]
+    WsApi["API Gateway · WebSocket API"]
+    Lambda["Lambda · Go API via Lambda Web Adapter"]
+    DDB[("DynamoDB · ws-connections\n(connection IDs, TTL)")]
+    Neon[("Neon Postgres\n(serverless, external)")]
+    EventBridge["EventBridge\nGPS sim tick, every 2 min"]
 
-### There's no such thing as a WebSocket on Lambda
+    Web -->|HTTPS| CF
+    Mobile -->|HTTPS| HttpApi
+    Web -->|HTTPS| HttpApi
+    Mobile -->|WSS| WsApi
+    Web -->|WSS| WsApi
+    HttpApi --> Lambda
+    WsApi -->|"$connect / $disconnect / $default"| Lambda
+    Lambda <-->|Put / Delete / Scan| DDB
+    Lambda -->|PostToConnection| WsApi
+    Lambda -->|pooled TLS conn| Neon
+    EventBridge -->|invoke| Lambda
+    Mobile & Web -.->|OAuth| Cognito
+    Lambda -.->|verify JWT| Cognito
+```
 
-Lambda Function URLs have a 15-minute timeout and don't support connection upgrades — a WebSocket needs a long-lived process, which is exactly what Lambda doesn't offer. Rather than drop real-time tracking on the cheap tier, the API runs two hub implementations behind the same interface, picked at startup:
+No VPC, no NAT — Lambda and Neon both sit on the public internet behind TLS.
+
+### How a WebSocket message actually moves
+
+Every event — connect, a GPS broadcast, disconnect — is a separate,
+stateless Lambda invocation. Nothing is held in memory between them; state
+lives in DynamoDB instead.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant WS as API Gateway<br/>WebSocket API
+    participant L as Lambda (Go API)
+    participant DDB as DynamoDB<br/>ws-connections
+    participant N as Neon
+
+    Note over C,WS: Connect
+    C->>WS: WSS connect ?ticket=...
+    WS->>L: $connect event
+    L->>N: redeem ticket (atomic, one-time use)
+    L->>DDB: PutItem connectionId (2h TTL)
+    L-->>WS: 200 OK
+    WS-->>C: connection upgraded
+
+    Note over L,C: Broadcast (e.g. a GPS ping)
+    L->>DDB: Scan all connectionIds
+    loop each connection
+        L->>WS: PostToConnection(id, payload)
+        WS-->>C: pushes the message
+        alt connection is stale (410 Gone)
+            L->>DDB: DeleteItem connectionId
+        end
+    end
+
+    Note over C,WS: Disconnect
+    C--xWS: socket closes
+    WS->>L: $disconnect event
+    L->>DDB: DeleteItem connectionId
+```
+
+A broadcast here is a DynamoDB `Scan` + one HTTPS call per connected
+client — real cost, unlike the in-memory fan-out `full`/`lite` use. That
+tradeoff only makes sense because Lambda gives no alternative; see
+`internal/wshub/hub.go` and `internal/api/websocket_apigw.go`.
+
+### Why Neon instead of RDS here
+
+Lambda has no "once" — every concurrent request is its own instance with
+its own DB pool, so a burst of requests opens a burst of connections. A
+small Postgres box tops out fast (`FATAL: too many connections`). RDS also
+can't help without a VPC (NAT cost) and bills 24/7 whether or not anyone
+hits the API.
+
+Neon fixes all three:
+
+- **Scales to zero** — an idle database costs ~nothing.
+- **Public internet + TLS** — no VPC, no NAT.
+- **Built-in connection pooler** — many Lambda instances multiplex onto a
+  few real Postgres connections.
+
+### Why DynamoDB *too*, if Neon already exists?
+
+They store different things. **Neon** is the system of record — suppliers,
+routes, risk data, and the one-time WebSocket auth tickets. **DynamoDB**
+holds nothing but ephemeral `connectionId → expiresAt` rows, alive for a
+couple of hours at most.
+
+Routing that connection registry through Neon instead would work, but:
+
+- Every connect/disconnect would be a write against the relational DB —
+  churn that has nothing to do with business data.
+- It would wake Neon's autosuspended compute on every socket open/close,
+  undermining the "scales to zero" property that makes it cheap.
+- DynamoDB's pay-per-request pricing sits in the free tier at this scale,
+  and TTL auto-expires stale rows with zero cleanup code.
+- It's the pattern AWS's own API Gateway WebSocket docs use — a Lambda
+  needs `execute-api:ManageConnections` IAM either way, so a purpose-built
+  KV store for connection state is the path of least resistance.
+
+Short version: Neon is the database; DynamoDB is a scratch pad for "who's
+currently connected," sized and priced for exactly that job.
+
+---
+
+## Why two WebSocket hub implementations
+
+The API picks a hub at startup based on environment, not profile name —
+so the same binary runs on any tier:
 
 ```mermaid
 flowchart LR
     Boot["Server boot"] --> Check{"DYNAMODB_WS_TABLE set?"}
-    Check -->|"yes — ultra-lite"| DDB["wshub.Hub\nAPI Gateway WebSocket API\n+ DynamoDB connection store"]
-    Check -->|"no — lite / full"| Gorilla["ws.Hub\ngorilla-websocket\nin-process, single goroutine"]
+    Check -->|yes — ultra-lite| DDB["wshub.Hub<br/>API Gateway + DynamoDB"]
+    Check -->|no — lite / full| Gorilla["ws.Hub<br/>gorilla-websocket, in-process"]
 ```
 
 *(`services/supply-chain-api/cmd/server/main.go:84-102`)*
 
-The gorilla hub was the original, only implementation; DynamoDB came later, once `ultra-lite` was actually deployed and it turned out Function URLs don't support WS upgrades at all. One routing quirk found along the way: on Lambda, the Web Adapter delivers API Gateway WebSocket events to `POST /events`, not the `$connect` route the docs imply (`internal/api/websocket_apigw.go`).
+Not redundant — each is matched to what its compute substrate can offer.
+`ws.Hub` is an in-memory `map[*Client]bool`; broadcasting is free, in-process
+socket writes. That only works where a process lives long enough to hold
+the map. Where it doesn't (Lambda), connection state has to live somewhere
+else, and every broadcast pays for it — that's the DynamoDB hub above.
+Running the DynamoDB design on `full`/`lite` would trade a free operation
+for a billed one, for no benefit.
 
-The obvious follow-up: now that the DynamoDB hub exists, why keep two — why not run the `ultra-lite` design on `lite` and `full` too and delete the gorilla path? Because the API Gateway + DynamoDB hub isn't a better hub, it's a *workaround for not having a process*, and on `lite`/`full` there is a process. The gorilla hub is an in-memory `map[*Client]bool` with a buffered broadcast channel (`internal/ws/hub.go`): a broadcast is a fan-out of in-process socket writes, no network, no AWS API, no per-message cost. The same broadcast on the DynamoDB hub is a `Scan` of the connection table plus one `PostToConnection` HTTPS call to API Gateway *per connected client* (`internal/wshub/hub.go`) — every message pays a DynamoDB read and N managed-API round-trips, and every connect/disconnect is a DynamoDB write. On a persistent server that's strictly worse on latency and cost, and it drags two managed services (an API Gateway WebSocket API, a DynamoDB table) plus their IAM into tiers whose entire premise is *not* paying for managed extras — the thing that keeps `lite` at ~$25/mo. So the split isn't redundant duplication; each hub is matched to its compute substrate. Persistent process → hold connections in memory. No process → externalize connection state, and eat the per-message cost because there's no alternative. Neither design can be the single universal one: gorilla can't run where there's no long-lived process to hold the map, and DynamoDB shouldn't run where there is.
+## Auth handshake (both hubs)
 
-Both hubs sit behind the same client-facing handshake — a client can't open a raw WebSocket, it has to trade a valid access token for a short-lived ticket first, since browsers won't set an `Authorization` header on a WS upgrade request:
+Browsers can't set an `Authorization` header on a WebSocket upgrade, so
+clients trade an access token for a short-lived, single-use ticket first:
 
 ```mermaid
 sequenceDiagram
@@ -93,63 +258,83 @@ sequenceDiagram
     alt valid & unused
         A->>H: register connection
         H-->>C: connection upgraded
-        H-->>C: position_update (broadcast)
     else invalid, expired, or reused
         A-->>C: 401
     end
 ```
 
-The ticket is single-use and hashed at rest (`internal/auth/ws_ticket.go`) specifically so the real access token never appears in a URL — the first version of this did put the raw token in `?token=`, which meant it landed in edge and access logs. That got replaced with the ticket exchange above as part of a broader auth-hardening pass (access-token validation instead of ID-token, a shared verifier for HTTP and WS, per-IP rate limiting).
+The raw access token never appears in a URL (it did once, and ended up in
+edge/access logs — this ticket exchange replaced that). See
+`internal/auth/ws_ticket.go`.
 
-### Lambda and a normal database don't get along either
+*Tickets stay in Postgres, not DynamoDB, even on `ultra-lite` — they're
+minted and redeemed within a single request/response, so there's no
+independent churn to protect Neon from, unlike connection IDs.*
 
-Same root problem as the WebSocket one, one layer down. A conventional Postgres setup assumes a handful of long-lived connections: the API opens a pool once at startup — here, 10 (`internal/db/connection.go`) — and reuses them for every request. Lambda has no "once." Each concurrent request runs in its own isolated instance with its own pool, so a burst of 100 simultaneous requests tries to open roughly 100× the connections, and a small Postgres instance tops out at a few dozen. That's the classic Lambda-plus-RDS failure: `FATAL: too many connections`, arriving under exactly the load you were hoping to serve.
+## Why TanStack Query
 
-RDS is the wrong fit on this tier for two further reasons. It's an always-on instance — you pay for it 24/7 whether or not anyone hits the API, which by itself busts the ~$1–3/mo `ultra-lite` budget. And it lives inside the VPC, so the Lambda would have to be VPC-attached to reach it, dragging in the NAT/egress cost described below plus extra cold-start latency. Neon (serverless Postgres) inverts all three: it scales compute to zero when idle so an untouched database costs almost nothing, it's reachable over the public internet with TLS so no VPC or NAT is needed, and it fronts a built-in connection pooler that multiplexes many client connections onto a few real Postgres ones — exactly the shape Lambda's fan-out needs. So `ultra-lite` isn't "RDS, but cheaper"; it's a different database posture, chosen because Lambda's execution model is fundamentally at odds with one always-on Postgres box. (The password still has to be kept out of the code — it's read from SSM Parameter Store at cold start, `cmd/server/main.go:46`.)
+The frontend used to carry its own copy of the domain — a hardcoded seed
+dataset plus TypeScript ports of the Go risk/disruption logic — as a
+`.catch(() => computeLocally(...))` fallback. It was cut for three reasons:
 
-### Designing for cost as a first-class constraint
+- **It drifted.** The disruption endpoint's request shape didn't match
+  between frontend and backend copies, silently masked by the fallback.
+- **It didn't scale** — a dataset baked into the client can't grow with
+  real fleets or suppliers.
+- **It hid failures** — a failed request recomputing locally looked like
+  success, with no error, no retry, no staleness signal.
 
-All three deployment profiles existed from the start of the CDK project rather than one evolving into another — "what does this cost to run" was a design input, not an afterthought, and it's what drove both the WebSocket and database splits above.
-
-The most concrete small example is the NAT. Anything in a private subnet — the App Runner container, the RDS instance — still needs *outbound* internet access to pull images, fetch Cognito's signing keys, and call AWS APIs, and that egress has to route through a NAT (network address translation) so private resources can reach out without being reachable from outside. AWS's managed **NAT Gateway** is the default, and it's surprisingly pricey for a side project: ~$32/mo just to exist, plus a per-GB data-processing fee, before any real traffic. `full` uses it (`stacks/network.go`) because at that tier you want the managed, highly-available version. `lite` swaps in a **NAT instance** (`stacks/network_lite.go`) — a single t4g.nano EC2 box running the NAT yourself: a few dollars a month, no high availability, the right trade when the whole tier targets ~$25/mo. `ultra-lite` sidesteps the question entirely — no VPC, no NAT — because Lambda and Neon both live on the public internet behind TLS. (`infra/cdk/README.md` has the full per-profile breakdown; EKS's control plane alone is $73/mo.)
+[TanStack Query](https://tanstack.com/query) (`apps/Globify/src/hooks/queries/`)
+replaced it as the sole data-fetching layer: declarative caching, request
+dedup, and real loading/error states, in place of hand-rolled debounce and
+fallback logic. There's no offline/mock mode anymore — the API must be
+running for the app to render anything.
 
 ## On not reinventing MapLibre
 
-The globe is hand-built — Three.js, a custom GLSL tile shader — to learn what's actually happening under something like Mapbox, not to ship the fastest product. Having built it: real respect for what MapLibre GL is, a C++-to-WASM renderer with years of tiling, labeling, and zoom work already solved. Right call for learning; wrong call for a product that needs true progressive zoom at scale — that's a MapLibre migration, not a bigger shader.
+The globe is hand-built — Three.js, a custom GLSL tile shader — to learn
+what's actually happening under something like Mapbox, not to ship the
+fastest product. Having built it: real respect for MapLibre GL, a
+C++-to-WASM renderer with years of tiling, labeling, and zoom work already
+solved. Right call for learning; wrong call for a product that needs true
+progressive zoom at scale — that's a MapLibre migration, not a bigger
+shader.
 
-## Backend as the single source of truth
+## Cost as a first-class constraint
 
-The frontend used to carry its own copy of the domain — a ~700-line hardcoded seed dataset, and TypeScript ports of the Go risk/disruption compute logic — as a `.catch(() => computeLocally(...))` fallback at about five call sites, plus a mock-vehicle path for demoing without a live API. That layer predated the backend: it was how the globe got built and iterated on before there was a Go service to talk to, and it stuck around as an offline/dev-mode convenience afterward.
+All three profiles existed from day one — "what does this cost" was a
+design input, not an afterthought. The clearest example: outbound internet
+access from a private subnet needs a NAT. AWS's managed **NAT Gateway** is
+~$32/mo before any traffic; `full` uses it for the HA guarantee. `lite`
+swaps in a **NAT instance** — a single t4g.nano EC2 box — for a few
+dollars a month. `ultra-lite` skips the question: no VPC, so no NAT at all.
 
-It came out for three reasons:
+## Current State
 
-- **Duplication was a correctness liability, not just dead weight.** The frontend and backend copies of the risk/disruption math could silently drift — and one already had: the disruption endpoint's request shape was `{ disabledIds }` on the backend but `{ disabledNodes }` in the frontend fallback, a mismatch the mock path had been quietly masking.
-- **A second, growing dataset baked into the client doesn't scale.** The seed data was small enough to hardcode when the demo had a couple hundred locations; it isn't the shape you want once real fleets, more suppliers, or higher-frequency GPS data are in play. Backend-only means the dataset can grow without a corresponding frontend rewrite.
-- **Loading/error state was being silently swallowed.** A failed request recomputing locally *looked* like success — no error surfaced, no retry, no way to tell the user data was stale. That's the wrong default for a supply-chain risk tool.
+Recently merged: Google OAuth, the DynamoDB WebSocket pivot above, an
+EventBridge-driven GPS simulator (every 2 minutes, heading-biased
+movement), and a GitHub OIDC deploy role replacing long-lived IAM keys.
 
-The replacement is [TanStack Query](https://tanstack.com/query) (`apps/Globify/src/hooks/queries/`) as the sole data-fetching layer: declarative caching, request dedup, and real loading/error states in place of the hand-rolled 300ms debounce and manual fallback logic. The seed-dataset referential-integrity check that used to live in a frontend `.spec.ts` moved to a hermetic Go test (`services/supply-chain-api/internal/seed`) — the backend is now the only place that data exists, so that's the only place that needs to validate it.
+Known, deliberately deferred:
 
-One consequence worth calling out for local dev: there is no offline/mock mode anymore. The API (`docker compose up` in `services/supply-chain-api/`) must be running for the app to render anything — see the root `README.md` Quick Start.
+- **`WebOrigin` hardcoded** in `infra/cdk/main.go` instead of wired
+  dynamically. Fails safe (Cognito rejects unregistered redirect URIs) but
+  would break if that CloudFront distribution were ever recreated.
+- **`GPS_SIM_TOKEN`** lives in the EventBridge rule's static event input —
+  readable by anyone with `events:DescribeRule`. Blast radius is fake GPS
+  pings, not data access; real fix is Secrets Manager at invoke time.
+- CI/CD and broader security hardening are both in progress.
 
-## Current state and what's next
-
-The most recent merged work: Google OAuth (replacing username/password), the DynamoDB WebSocket pivot above, an EventBridge-driven GPS simulator (fires every 2 minutes, heading-biased movement, so the demo has live motion without a real fleet feeding it), and a GitHub OIDC deploy role in place of long-lived IAM access keys.
-
-Known, deliberately deferred items:
-
-- **`WebOrigin` hardcoded** in `infra/cdk/main.go` — a CloudFront domain literal instead of wired dynamically from the web-hosting stack. Fails safe (Cognito rejects an unregistered redirect URI), but would break if that CloudFront distribution were ever torn down and recreated. Fix is a stack-construction reorder, known and just not urgent.
-- **`GPS_SIM_TOKEN` in the EventBridge rule's static event input** (`infra/cdk/stacks/lambda_api.go`) — readable by anyone with `events:DescribeRule` access to the account. Can't just be deleted: it's the only thing distinguishing a genuine EventBridge tick from a spoofed public HTTP call, since the Lambda Web Adapter routes both through the same code path. Real fix is fetching it from Secrets Manager at invoke time. Low urgency — blast radius today is fake GPS pings, not data access.
-- **Progressive globe textures** — `tileShader.ts` already composites up to 8 high-res tile overlays; the OpenSpec tracker for this feature undercounts progress relative to the code.
-- CI/CD and broader security hardening are both explicitly in progress.
-
-## Notable files
+## Notable Files
 
 | File | What it does |
 |---|---|
-| `apps/Globify/src/components/Globe/tileShader.ts` | Custom GLSL shader compositing up to 8 high-res tile overlays, geographic-bounds alpha fade |
-| `services/supply-chain-api/cmd/server/main.go:84-102` | Selects between the two WebSocket hub implementations |
-| `services/supply-chain-api/internal/auth/ws_ticket.go` | Single-use, sha256-hashed, 30-second-TTL WebSocket auth tickets |
-| `services/supply-chain-api/internal/auth/cognito.go` | Cognito JWT verification with JWKS caching |
-| `services/supply-chain-api/internal/risk/` | Concentration risk scoring, ported from an earlier TypeScript prototype |
-| `infra/cdk/stacks/` | The three cost-tiered CDK stacks, selected via `switch profile` in `infra/cdk/main.go` |
-| `services/supply-chain-api/internal/api/gps_simulator.go` | EventBridge-driven GPS simulator behind the live truck motion |
+| `apps/Globify/src/components/Globe/tileShader.ts` | Custom GLSL shader, up to 8 composited tile overlays |
+| `services/supply-chain-api/cmd/server/main.go:84-102` | Picks the WebSocket hub implementation |
+| `services/supply-chain-api/internal/wshub/hub.go` | Ultra-lite hub: API Gateway + DynamoDB |
+| `services/supply-chain-api/internal/ws/hub.go` | Full/lite hub: in-process gorilla-websocket |
+| `services/supply-chain-api/internal/auth/ws_ticket.go` | Single-use, hashed, 30s-TTL WS auth tickets |
+| `services/supply-chain-api/internal/auth/cognito.go` | Cognito JWT verification, JWKS caching |
+| `services/supply-chain-api/internal/risk/` | Concentration risk scoring |
+| `infra/cdk/stacks/` | The three cost-tiered CDK stacks (`infra/cdk/main.go` picks one via `profile`) |
+| `services/supply-chain-api/internal/api/gps_simulator.go` | EventBridge-driven GPS simulator |
