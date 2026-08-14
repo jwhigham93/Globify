@@ -49,7 +49,7 @@ flowchart TB
     CF["CloudFront + S3"]
 
     subgraph VPC["VPC (2 AZs)"]
-        ALB["ALB + WAF"]
+        ALB["ALB"]
         EKS["EKS · API pods (2-6)"]
         NAT["NAT Gateway"]
         RDS[("RDS Postgres 16")]
@@ -66,7 +66,9 @@ flowchart TB
 ```
 
 Everything is a long-lived process: EKS pods hold WebSocket connections in
-memory, RDS is always-on. Fully managed, highly available, expensive.
+memory, RDS is always-on. Fully managed, highly available, expensive. WAF
+protects the CloudFront-served web app; the ALB itself has no WAF attached
+(see "Current State" below).
 
 ## `lite` — staging/demo shape
 
@@ -75,19 +77,17 @@ flowchart TB
     Mobile["Expo app"]
     Web["Web client"]
     Cognito["Cognito User Pool"]
-    CF["CloudFront + S3"]
-    WAF["WAF · rate limiting"]
+    CF["CloudFront + S3<br/>(WAF attached)"]
 
     subgraph VPC
-        API["App Runner · Go API"]
+        API["App Runner · Go API<br/>(public endpoint, no WAF)"]
         NAT["NAT instance (t4g.nano)"]
         RDS[("RDS Postgres 16")]
     end
 
     Web -->|HTTPS| CF
-    Mobile -->|HTTPS + WSS| WAF
-    Web -->|HTTPS + WSS| WAF
-    WAF --> API
+    Mobile -->|HTTPS + WSS| API
+    Web -->|HTTPS + WSS| API
     API --> RDS
     API -.->|egress| NAT
     Mobile & Web -.->|OAuth| Cognito
@@ -96,7 +96,9 @@ flowchart TB
 
 Still one persistent process (App Runner container), so it still holds
 WebSocket connections in memory just like `full`. The only swaps are managed
-→ cheap building blocks: NAT Gateway → NAT instance, EKS → App Runner.
+→ cheap building blocks: NAT Gateway → NAT instance, EKS → App Runner. WAF
+here only covers the CloudFront-served web app — App Runner has no WAF in
+front of it either (see "Current State" below).
 
 ## `ultra-lite` — what we actually run
 
@@ -205,8 +207,11 @@ Routing that connection registry through Neon instead would work, but:
   churn that has nothing to do with business data.
 - It would wake Neon's autosuspended compute on every socket open/close,
   undermining the "scales to zero" property that makes it cheap.
-- DynamoDB's pay-per-request pricing sits in the free tier at this scale,
-  and TTL auto-expires stale rows with zero cleanup code.
+- DynamoDB's on-demand pricing is cents/month at hobby-project connection
+  volumes (AWS's DynamoDB free tier technically only covers *provisioned*
+  capacity, which this table doesn't use — but the on-demand cost at this
+  scale is negligible regardless), and TTL auto-expires stale rows with
+  zero cleanup code.
 - It's the pattern AWS's own API Gateway WebSocket docs use — a Lambda
   needs `execute-api:ManageConnections` IAM either way, so a purpose-built
   KV store for connection state is the path of least resistance.
@@ -223,12 +228,12 @@ so the same binary runs on any tier:
 
 ```mermaid
 flowchart LR
-    Boot["Server boot"] --> Check{"DYNAMODB_WS_TABLE set?"}
+    Boot["Server boot"] --> Check{"DYNAMODB_WS_TABLE AND<br/>APIGW_WS_ENDPOINT set?"}
     Check -->|yes — ultra-lite| DDB["wshub.Hub<br/>API Gateway + DynamoDB"]
     Check -->|no — lite / full| Gorilla["ws.Hub<br/>gorilla-websocket, in-process"]
 ```
 
-*(`services/supply-chain-api/cmd/server/main.go:84-102`)*
+*(`services/supply-chain-api/cmd/server/main.go:89-112`)*
 
 Not redundant — each is matched to what its compute substrate can offer.
 `ws.Hub` is an in-memory `map[*Client]bool`; broadcasting is free, in-process
@@ -237,6 +242,22 @@ the map. Where it doesn't (Lambda), connection state has to live somewhere
 else, and every broadcast pays for it — that's the DynamoDB hub above.
 Running the DynamoDB design on `full`/`lite` would trade a free operation
 for a billed one, for no benefit.
+
+### Why EventBridge drives the GPS simulator
+
+Same "no persistent process" constraint, one more place it bites: on
+`full`/`lite`, a goroutine with a `time.Ticker` fires the GPS simulator
+every 2 minutes — trivial, because the process never exits. Lambda has no
+such process to hold a ticker in. **EventBridge** stands in for it: a
+scheduled rule invokes the Lambda every 2 minutes with a synthetic event
+(`source: supply-chain.simulator`), and the same handler that dispatches
+real API Gateway events recognizes it and calls the same `RunGPSSimulator`
+function — which moves each truck along its route and broadcasts the new
+position over whichever WS hub is active. One simulator function, two
+different clocks driving it: an in-process ticker where a process exists,
+an external scheduler where it doesn't. See
+`services/supply-chain-api/internal/api/gps_simulator.go` and
+`cmd/server/main.go`'s `runLocalGPSTicker`.
 
 ## Auth handshake (both hubs)
 
@@ -323,6 +344,11 @@ Known, deliberately deferred:
 - **`GPS_SIM_TOKEN`** lives in the EventBridge rule's static event input —
   readable by anyone with `events:DescribeRule`. Blast radius is fake GPS
   pings, not data access; real fix is Secrets Manager at invoke time.
+- **REGIONAL WAF ACL provisioned but unattached** — `SecurityStack`
+  creates a Web ACL meant for the ALB/API path on `full` and `lite`, but
+  `main.go` never associates it with anything; only the CloudFront-scoped
+  ACL is actually wired up. The API itself isn't WAF-protected on any
+  profile today.
 - CI/CD and broader security hardening are both in progress.
 
 ## Notable Files
@@ -330,7 +356,7 @@ Known, deliberately deferred:
 | File | What it does |
 |---|---|
 | `apps/Globify/src/components/Globe/tileShader.ts` | Custom GLSL shader, up to 8 composited tile overlays |
-| `services/supply-chain-api/cmd/server/main.go:84-102` | Picks the WebSocket hub implementation |
+| `services/supply-chain-api/cmd/server/main.go:89-112` | Picks the WebSocket hub implementation |
 | `services/supply-chain-api/internal/wshub/hub.go` | Ultra-lite hub: API Gateway + DynamoDB |
 | `services/supply-chain-api/internal/ws/hub.go` | Full/lite hub: in-process gorilla-websocket |
 | `services/supply-chain-api/internal/auth/ws_ticket.go` | Single-use, hashed, 30s-TTL WS auth tickets |

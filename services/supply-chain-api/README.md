@@ -9,7 +9,7 @@ A Go REST API for supply chain visualization, risk computation, and disruption s
 
 ## Architecture
 
-```
+```text
 cmd/server/          → Server entrypoint (graceful shutdown, config)
 internal/
   api/               → HTTP handlers, router, health checks
@@ -24,8 +24,9 @@ migrations/          → PostgreSQL schema & seed data
 sqlc/                → sqlc configuration
 ```
 
-`main.go` picks between `ws` and `wshub` at startup based on whether
-`DYNAMODB_WS_TABLE` is set — the same binary runs on every deploy profile.
+`main.go` picks `wshub` at startup only when *both* `DYNAMODB_WS_TABLE` and
+`APIGW_WS_ENDPOINT` are set; otherwise it falls back to `ws`. The same
+binary runs on every deploy profile.
 
 ## API Endpoints
 
@@ -60,10 +61,10 @@ sqlc/                → sqlc configuration
 | `SSM_DATABASE_URL` | No | — | Name of an AWS SSM SecureString parameter to read `DATABASE_URL` from at cold start. Used in place of `DATABASE_URL` on Lambda (`ultra-lite`); see `infra/cdk/README.md`. |
 | `PORT` | No | `8080` | HTTP listen port |
 | `ALLOWED_ORIGINS` | No | `*` | Comma-separated CORS origins |
-| `COGNITO_USER_POOL_ID` | No | — | AWS Cognito User Pool ID (auth bypassed if empty) |
+| `COGNITO_USER_POOL_ID` | Yes** | — | AWS Cognito User Pool ID. **Required unless `AUTH_DISABLED=true` — if it's missing and auth isn't explicitly disabled, the server fails to start rather than silently allowing unauthenticated requests. |
 | `COGNITO_CLIENT_ID` | No | — | AWS Cognito App Client ID |
 | `COGNITO_REGION` | No | — | AWS region of the Cognito User Pool |
-| `AUTH_DISABLED` | No | — | Set to `true` to force-bypass auth (local dev only) |
+| `AUTH_DISABLED` | No | — | Set to `true` to bypass auth entirely (local dev only) — the only way to run without Cognito configured |
 | `DYNAMODB_WS_TABLE` | No | — | DynamoDB table name for WebSocket connection IDs. Selects the Lambda WS hub (`internal/wshub`) when set; unset selects the in-memory hub (`internal/ws`). |
 | `APIGW_WS_ENDPOINT` | No | — | API Gateway WebSocket callback URL, used to push messages back to clients. Required alongside `DYNAMODB_WS_TABLE`. |
 | `GPS_SIM_TOKEN` | No | — | Shared secret required in the EventBridge GPS-simulator payload (Lambda only) |
