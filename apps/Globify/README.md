@@ -2,6 +2,10 @@
 
 React Native + Expo 54 app rendering the supply-chain globe.
 
+> Part of the [Globify](../../README.md) monorepo. See
+> [`ENGINEERING_NOTES.md`](../../ENGINEERING_NOTES.md#why-tanstack-query) for
+> why TanStack Query replaced the old local-fallback data layer.
+
 ## Data source
 
 The backend API is the **single source of truth** for all domain data — topology
