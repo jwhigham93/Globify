@@ -176,6 +176,40 @@ export const TRUCK_SIM_MINUTES_PER_TICK = 0.5; // simulated time per tick (slow 
 export const TRUCK_LIVE_THRESHOLD_MS = 5 * 60 * 1000;    // 5 minutes
 export const TRUCK_STALE_THRESHOLD_MS = 15 * 60 * 1000;  // 15 minutes
 
+// ── Major city labels ─────────────────────────────────────────────────
+// See services/labelCollision.ts for the screen-space declutter algorithm
+// and components/Globe/CityLabelsLayer.tsx for the layer that uses them.
+
+// Altitude above the globe surface, clear of tiles and route paths.
+export const CITY_LABEL_ALTITUDE = 0.01;
+
+// Font size in globe-relative units (troika-three-text `fontSize`).
+export const CITY_LABEL_FONT_SIZE = 1.1;
+
+// Letter-spacing, mirrors ui/theme.ts's font.tracking.label (in em, troika's unit).
+export const CITY_LABEL_LETTER_SPACING = 0.08;
+
+// How often (ms) the declutter pass re-runs. Every frame is unnecessary —
+// mirrors the TILE_CHECK_INTERVAL throttle pattern above.
+export const CITY_LABEL_COLLISION_CHECK_INTERVAL_MS = 150;
+
+// Fallback collision-box size (px) for a label's first frame or two, before
+// troika has synced its text geometry and a real bounding box exists to
+// measure. Once synced, the collision box is read from the actual glyph
+// geometry (see CityLabelsLayer's useFrame) — this is deliberately rough,
+// it only has to hold for a handful of frames.
+export const CITY_LABEL_CHAR_WIDTH_PX = 9;
+export const CITY_LABEL_HEIGHT_PX = 14;
+
+// Zoom-based label scaling. Text is fixed-size in world units, so without
+// this, perspective alone makes labels balloon as the camera approaches —
+// the opposite of every other marker on the globe, which all shrink toward
+// ZOOM_MIN_DISTANCE via the MARKER_SCALE_* curve above. Reusing that same
+// curve (MARKER_SCALE_NEAR_DIST/FAR_DIST) keeps labels' apparent screen size
+// roughly steady across the zoom range instead of ballooning up close.
+export const CITY_LABEL_SCALE_MIN = 0.3; // at ZOOM_MIN_DISTANCE (closest zoom)
+export const CITY_LABEL_SCALE_MAX = 1.0; // at ZOOM_MAX_DISTANCE (farthest zoom)
+
 // Route polyline — path segments when a truck is selected
 export const ROUTE_PATH_COMPLETED_STROKE = 1.2;
 export const ROUTE_PATH_REMAINING_STROKE = 1.8;

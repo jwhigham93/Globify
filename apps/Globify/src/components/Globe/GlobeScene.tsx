@@ -42,6 +42,7 @@ import { resolveClickTarget } from '../../services/resolveGlobeClick';
 import { StarryBackground } from './StarryBackground';
 import { Controls } from './Controls';
 import { TruckLayer } from './TruckLayer';
+import { CityLabelsLayer } from './CityLabelsLayer';
 
 export interface GlobeSceneProps {
   dataPoints: DataPoint[];
@@ -66,6 +67,8 @@ export interface GlobeSceneProps {
   onTruckClick?: (vehicleId: string) => void;
   /** Route path segments for selected truck (origin→truck, truck→destination) */
   routePathData?: RoutePathSegment[];
+  /** Whether the major-city labels layer is visible */
+  showCityLabels?: boolean;
 }
 
 /**
@@ -176,6 +179,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   onZoomTargetReached,
   vehiclePositions,
   showTrucks = false,
+  showCityLabels = false,
   onTruckClick,
   routePathData = [],
 }) => {
@@ -432,6 +436,11 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
         vehiclePositions={vehiclePositions}
         showTrucks={showTrucks}
         isReady={isInitialized}
+      />
+      <CityLabelsLayer
+        globeRef={globeRef}
+        isReady={isInitialized}
+        visible={showCityLabels}
       />
     </>
   );

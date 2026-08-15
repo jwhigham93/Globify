@@ -73,11 +73,15 @@ cdk deploy --all -c profile=ultra-lite
 
 - **React Native + Expo 54** targeting iOS, Android, and web
 - **3D globe**: Three.js via `react-three-fiber`
-- **Globe components** live in `src/components/Globe/` — `GlobeScene.tsx` is the root, `GlobeVisualization.tsx` orchestrates layers
+- **Globe components** live in `src/components/Globe/` — `GlobeScene.tsx` is the root, `GlobeVisualization.tsx` orchestrates layers. Layers that own their own globe-parented group (rather than going through `three-globe`'s `objectsData`) follow `TruckLayer.tsx`'s pattern — `CityLabelsLayer.tsx` (vectorized city-name labels, `@react-three/drei`'s `Text`/troika-three-text) is the other example; its screen-space label-overlap decluttering lives in `services/labelCollision.ts`
+- **`@react-three/drei` imports must come from `@react-three/drei/native`, never the package root.** The root barrel pulls in drei utilities that reach zustand's devtools middleware, which references `import.meta.env` — valid in a real ES module, but Metro's bundle output isn't one, so the whole app throws `Cannot use 'import.meta' outside a module` at runtime (on web *and* native — this isn't a web-only DOM issue). `@react-three/drei/native` is drei's own curated RN-safe subset (`Text`, `Billboard`, `Line`, etc.) and doesn't hit that code path. Any new drei component must be checked against `native/index.js` in the installed package before use.
 - **Services** in `src/services/` are pure TS — no React — and each has a `.spec.ts` alongside it
 - **Auth**: AWS Cognito via `AuthProvider.tsx`; token is injected into `apiClient.ts` via `setTokenGetter`
 - **Real-time**: WebSocket GPS stream in `gpsStreamService.ts` → `useVehiclePositions.ts`
-- **View modes**: globe / flat-map / satellite — cycled via `ViewModeToggle`
+- **View modes**: `standard` / `concentration-risk` / `disruption` — data
+  overlays cycled via `ViewModeToggle`, all rendered on the same single
+  Three.js/`three-globe` pipeline (no separate flat-map or satellite
+  renderer exists)
 - **HUD overlays**: shared tokens in `src/components/ui/` — `theme.ts` (brutalist:
   radius 0, opaque fills, hard borders, mono uppercase via `textTransform`),
   `layout.ts` (single `NARROW_BREAKPOINT`, named anchor slots, safe-area insets).

@@ -64,6 +64,8 @@ function baseProps(overrides: Partial<GlobeHudProps> = {}): GlobeHudProps {
     showTrucks: false,
     onToggleTrucks: jest.fn(),
     vehicleCount: 0,
+    showCityLabels: true,
+    onToggleCityLabels: jest.fn(),
     failedQueries: [],
     showDisruptionHint: false,
     showControlsHint: true,
