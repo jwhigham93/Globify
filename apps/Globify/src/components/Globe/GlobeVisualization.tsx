@@ -82,6 +82,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
 
   // ── Truck GPS layer ──────────────────────────────────────────────
   const [showTrucks, setShowTrucks] = useState(false);
+  const [showCityLabels, setShowCityLabels] = useState(true);
   const [selectedTruckId, setSelectedTruckId] = useState<string | null>(null);
   const { positions: vehiclePositions } = useVehiclePositions(
     config.resolvedWsUrl,
@@ -144,6 +145,10 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
 
   const toggleTrucks = useCallback(() => {
     setShowTrucks((prev) => !prev);
+  }, []);
+
+  const toggleCityLabels = useCallback(() => {
+    setShowCityLabels((prev) => !prev);
   }, []);
 
   // Detect WebGL support on web so we fail fast instead of showing a stuck overlay
@@ -486,6 +491,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
               showTrucks={showTrucks}
               onTruckClick={handleTruckClick}
               routePathData={routePathData}
+              showCityLabels={showCityLabels}
             />
           </Canvas>
         </Suspense>
@@ -499,6 +505,8 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
           showTrucks={showTrucks}
           onToggleTrucks={toggleTrucks}
           vehicleCount={vehiclePositions.size}
+          showCityLabels={showCityLabels}
+          onToggleCityLabels={toggleCityLabels}
           failedQueries={failedQueries}
           showDisruptionHint={viewMode === 'disruption' && disabledNodeIds.size === 0}
           showControlsHint={cameraDistance > CONTROLS_HINT_HIDE_DISTANCE}

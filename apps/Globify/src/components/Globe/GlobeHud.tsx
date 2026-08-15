@@ -15,6 +15,7 @@ import { View, StyleSheet } from 'react-native';
 import { useHudLayout, useIsTouch, HUD } from '../ui/layout';
 import { color } from '../ui/theme';
 import { SpinToggle } from './SpinToggle';
+import { CityLabelsToggle } from './CityLabelsToggle';
 import { HintPill } from './HintPill';
 import { FailureBanner } from './FailureBanner';
 import { HudControlBar } from './HudControlBar';
@@ -45,6 +46,9 @@ export interface GlobeHudProps {
   onToggleTrucks: () => void;
   vehicleCount: number;
 
+  showCityLabels: boolean;
+  onToggleCityLabels: () => void;
+
   /** Names of backend queries that failed; drives the top banner. */
   failedQueries: string[];
   /** Disruption mode is on and no node has been disabled yet. */
@@ -74,6 +78,8 @@ export const GlobeHud: React.FC<GlobeHudProps> = ({
   showTrucks,
   onToggleTrucks,
   vehicleCount,
+  showCityLabels,
+  onToggleCityLabels,
   failedQueries,
   showDisruptionHint,
   showControlsHint,
@@ -103,6 +109,11 @@ export const GlobeHud: React.FC<GlobeHudProps> = ({
 
   return (
     <>
+      <CityLabelsToggle
+        visible={showCityLabels}
+        onToggle={onToggleCityLabels}
+        style={slot('bottom-left', { layer: 'bar', stackAbove: HUD.barHeight + HUD.gap })}
+      />
       <SpinToggle
         isSpinning={isStarsSpinning}
         onToggle={onToggleStarsSpinning}
