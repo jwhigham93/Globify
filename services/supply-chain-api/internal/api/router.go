@@ -14,8 +14,8 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/auth"
-	wsHub "github.com/jwhig/jw-dev/services/supply-chain-api/internal/ws"
-	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wshub"
+	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wsapigw"
+	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wsgorilla"
 )
 
 // defaultDevOrigin is used when ALLOWED_ORIGINS is unset (local Expo web dev).
@@ -48,7 +48,7 @@ func parseAllowedOrigins() []string {
 // gorillaHub is the local-dev gorilla WebSocket hub (nil in production).
 // ddbHub is the DynamoDB-backed hub for Lambda/API Gateway (nil in local dev).
 // Pass exactly one non-nil hub; the other should be nil.
-func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, gorillaHub *wsHub.Hub, ddbHub *wshub.Hub, simToken string) *chi.Mux {
+func NewRouter(pool *pgxpool.Pool, verifier *auth.Verifier, gorillaHub *wsgorilla.Hub, ddbHub *wsapigw.Hub, simToken string) *chi.Mux {
 	r := chi.NewRouter()
 
 	// ── Global middleware ─────────────────────────────────────────────

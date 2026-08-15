@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	wsHub "github.com/jwhig/jw-dev/services/supply-chain-api/internal/ws"
+	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wsgorilla"
 )
 
 // HealthzHandler returns a liveness probe — always 200 OK.
@@ -28,7 +28,7 @@ type readyzResponse struct {
 }
 
 // ReadyzHandler returns a readiness probe — 200 if the database is reachable.
-func ReadyzHandler(pool *pgxpool.Pool, hub *wsHub.Hub) http.HandlerFunc {
+func ReadyzHandler(pool *pgxpool.Pool, hub *wsgorilla.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()

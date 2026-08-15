@@ -9,13 +9,13 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/auth"
-	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wshub"
+	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wsapigw"
 )
 
 // HandleWsConnect processes API Gateway $connect events forwarded by Lambda
 // Web Adapter as POST /_ws/connect. It validates the single-use WS ticket
 // then stores the connection ID in DynamoDB so Broadcast can reach it.
-func HandleWsConnect(pool *pgxpool.Pool, hub *wshub.Hub, authEnabled bool) http.HandlerFunc {
+func HandleWsConnect(pool *pgxpool.Pool, hub *wsapigw.Hub, authEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		connectionID := r.Header.Get("x-connection-id")
 		if connectionID == "" {
@@ -49,7 +49,7 @@ func HandleWsConnect(pool *pgxpool.Pool, hub *wshub.Hub, authEnabled bool) http.
 // ID alone. We require the API Gateway-set x-event-type header to match, mirroring
 // the x-connection-id header mapping this path already assumes. The robust fix is
 // to route these paths only from API Gateway at the infra layer (tracked backlog).
-func HandleWsDisconnect(hub *wshub.Hub) http.HandlerFunc {
+func HandleWsDisconnect(hub *wsapigw.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-event-type") != "DISCONNECT" {
 			http.Error(w, `{"error":"invalid event"}`, http.StatusBadRequest)
@@ -84,7 +84,7 @@ const maxEventBodyBytes = 64 * 1024
 // simToken is the value of the GPS_SIM_TOKEN env var. A non-empty token is
 // required in the EventBridge event detail, preventing public HTTP callers from
 // triggering the GPS simulator via the publicly reachable /events endpoint.
-func HandleLambdaEvents(pool *pgxpool.Pool, hub *wshub.Hub, authEnabled bool, simToken string) http.HandlerFunc {
+func HandleLambdaEvents(pool *pgxpool.Pool, hub *wsapigw.Hub, authEnabled bool, simToken string) http.HandlerFunc {
 	type wsRequestContext struct {
 		RouteKey     string `json:"routeKey"`
 		ConnectionID string `json:"connectionId"`
