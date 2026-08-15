@@ -234,7 +234,6 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
 
       // Create globe instance matching submarine cables example style
       // Using NASA Black Marble 2016 high-resolution texture (13500x6750)
-      // Options: earthNightHighRes (high-res), earthNightMediumRes (lighter weight)
       const earthTextureUri = resolveAssetUri(TEXTURE_ASSETS.earthNightHighResDimmed);
       
       const globe = new ThreeGlobe({ animateIn: false })

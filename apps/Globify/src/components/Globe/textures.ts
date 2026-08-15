@@ -1,22 +1,25 @@
 /**
  * Texture assets configuration
- * Earth textures sourced from NASA Earth Observatory
- * - Night: Black Marble project https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/
- * - Day: Blue Marble Next Generation https://science.nasa.gov/earth/earth-observatory/blue-marble-next-generation/
+ * Earth texture sourced from NASA Earth Observatory's Black Marble project:
+ * https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/
+ *
+ * Only the two textures actually rendered live here. Metro bundles whatever
+ * a `require()` call points at regardless of whether the resulting property
+ * is ever read at runtime — so a medium-res tier, an un-dimmed high-res
+ * tier, and a day-side (Blue Marble) texture previously sat in this object
+ * unused, adding ~42MB to every build for zero runtime benefit. Swapping
+ * quality tiers already requires a code change and rebuild, so there's no
+ * "keep it bundled in case someone flips a flag" case for the others —
+ * re-add a texture here (and restore its file under assets/textures/) only
+ * when something actually renders it.
  */
 
 import { Asset } from 'expo-asset';
 
 // Local texture assets - bundled with the app for reliability
 export const TEXTURE_ASSETS = {
-  // NASA Black Marble 2016 Grayscale - Medium resolution (3600x1800) - lighter weight
-  earthNightMediumRes: require('../../../assets/textures/earth-night-2016-mediumres-gray.jpg'),
-  // NASA Black Marble 2016 Grayscale - High resolution (13500x6750, 3km)
-  earthNightHighRes: require('../../../assets/textures/earth-night-2016-highres-gray.jpg'),
   // NASA Black Marble 2016 Grayscale - High resolution (13500x6750, 3km) - Dimmed lights
   earthNightHighResDimmed: require('../../../assets/textures/earth-night-2016-highres-gray-dimmed-2.jpg'),
-  // NASA Blue Marble Next Generation - Medium resolution (5400x2700, 8km) - July 2004
-  earthDayMediumRes: require('../../../assets/textures/earth-day-bluemarble-mediumres.jpg'),
   // Starry background
   nightSky: require('../../../assets/textures/night-sky.png'),
 };
