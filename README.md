@@ -1,6 +1,6 @@
 # Globify — Supply Chain Visibility Platform
 
-<img width="1919" height="952" alt="Screenshot 2026-06-12 094940" src="https://github.com/user-attachments/assets/a6f9510a-afd7-4cfd-a889-1f037cacf222" />
+<img width="1919" height="953" alt="Screenshot 2026-08-15 153825" src="https://github.com/user-attachments/assets/d08f6da8-33d1-4bef-b61f-4ce383b76251" />
 
 A full-stack supply chain visibility platform built around an interactive 3D globe. Renders real-time truck positions, supplier routes, disruption risk, and concentration risk for a representative QSR supply chain dataset.
 
