@@ -3,6 +3,8 @@
  */
 
 import React from 'react';
+import { StyleSheet } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import { render } from '@testing-library/react-native';
 import { LegendPanel } from './LegendPanel';
 
@@ -54,5 +56,13 @@ describe('LegendPanel', () => {
   it('does not show risk gradient in disruption mode', () => {
     const { queryByText } = render(<LegendPanel viewMode="disruption" />);
     expect(queryByText('Risk Level')).toBeNull();
+  });
+
+  it('matches the DC accent color used elsewhere in the HUD (#44AADD)', () => {
+    const { getByTestId } = render(<LegendPanel viewMode="standard" />);
+    const flat = StyleSheet.flatten(
+      getByTestId('legend-dc-swatch').props.style,
+    ) as ViewStyle;
+    expect(flat.backgroundColor).toBe('#44AADD');
   });
 });

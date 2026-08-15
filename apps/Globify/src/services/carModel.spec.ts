@@ -12,6 +12,8 @@ import {
   shortestAngleDelta,
   smoothAngle,
   smoothScalar,
+  shortestLngDelta,
+  smoothLongitude,
 } from './carModel';
 import {
   TRUCK_COLOR_LIVE,
@@ -262,5 +264,50 @@ describe('smoothScalar', () => {
     let value = 0;
     for (let i = 0; i < 500; i++) value = smoothScalar(value, -84.39, 3, 1 / 60);
     expect(value).toBeCloseTo(-84.39, 4);
+  });
+});
+
+describe('shortestLngDelta', () => {
+  it('takes the short way across the antimeridian', () => {
+    // 179.9° → -179.9° is a +0.2° eastward hop, not a -359.8° sweep back
+    // around the globe.
+    expect(shortestLngDelta(179.9, -179.9)).toBeCloseTo(0.2, 6);
+    expect(shortestLngDelta(-179.9, 179.9)).toBeCloseTo(-0.2, 6);
+  });
+
+  it('is zero for equal longitudes', () => {
+    expect(shortestLngDelta(12.34, 12.34)).toBeCloseTo(0, 10);
+  });
+
+  it('always lands in (-180, 180]', () => {
+    for (let from = -720; from <= 720; from += 17) {
+      for (let to = -720; to <= 720; to += 23) {
+        const d = shortestLngDelta(from, to);
+        expect(d).toBeGreaterThan(-180 - 1e-9);
+        expect(d).toBeLessThanOrEqual(180 + 1e-9);
+      }
+    }
+  });
+});
+
+describe('smoothLongitude', () => {
+  it('wraps across the antimeridian rather than sweeping the long way round', () => {
+    // A truck at 179.9°E easing toward -179.9° (a short hop east across the
+    // meridian) must move forward past 180°, never backward through 0°.
+    const start = 179.9;
+    const next = smoothLongitude(start, -179.9, TRUCK_HEADING_SMOOTH_K, 1 / 60);
+    expect(next).toBeGreaterThan(start);
+  });
+
+  it('converges on the target', () => {
+    // Same side of the antimeridian, so the short path never wraps and the
+    // raw value converges exactly onto the target (no mod-360 ambiguity).
+    let value = 100;
+    for (let i = 0; i < 500; i++) value = smoothLongitude(value, 170, 3, 1 / 60);
+    expect(value).toBeCloseTo(170, 4);
+  });
+
+  it('stays put when already on target', () => {
+    expect(smoothLongitude(42.5, 42.5, 3, 1 / 60)).toBeCloseTo(42.5, 10);
   });
 });

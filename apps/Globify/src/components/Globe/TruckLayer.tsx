@@ -29,6 +29,7 @@ import {
   disposeCarResources,
   smoothAngle,
   smoothScalar,
+  smoothLongitude,
   type CarMesh,
 } from '../../services/carModel';
 import { getTruckColor, computePulseScale, type GpsStatus } from '../../services/truckVisuals';
@@ -187,7 +188,7 @@ export const TruckLayer: React.FC<TruckLayerProps> = ({
 
     for (const state of statesRef.current.values()) {
       state.curLat = smoothScalar(state.curLat, state.tgtLat, TRUCK_POSITION_SMOOTH_K, dt);
-      state.curLng = smoothScalar(state.curLng, state.tgtLng, TRUCK_POSITION_SMOOTH_K, dt);
+      state.curLng = smoothLongitude(state.curLng, state.tgtLng, TRUCK_POSITION_SMOOTH_K, dt);
       state.curHeading = smoothAngle(
         state.curHeading,
         state.tgtHeading,

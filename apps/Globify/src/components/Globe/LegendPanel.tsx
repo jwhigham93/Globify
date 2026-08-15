@@ -20,13 +20,14 @@ export interface LegendPanelProps {
   viewMode: ViewMode;
 }
 
-const LegendRow: React.FC<{ kind: ShapeKind; tint: string; label: string }> = ({
+const LegendRow: React.FC<{ kind: ShapeKind; tint: string; label: string; testID?: string }> = ({
   kind,
   tint,
   label,
+  testID,
 }) => (
   <View style={legendStyles.row}>
-    <ShapeCell kind={kind} tint={tint} />
+    <ShapeCell kind={kind} tint={tint} testID={testID} />
     <Text style={legendStyles.label}>{label}</Text>
   </View>
 );
@@ -35,9 +36,10 @@ export const LegendPanel: React.FC<LegendPanelProps> = ({ viewMode }) => {
   const isRiskMode = viewMode === 'concentration-risk';
   const isDisruptionMode = viewMode === 'disruption';
 
-  // Shape colors change per mode to match on-globe appearance
+  // Shape colors change per mode to match on-globe appearance. DC matches the
+  // accent used in EntityDetailPanel/DisruptionPanel for distribution centers.
   const supplierColor = isDisruptionMode ? color.risk.low : '#FF9933';
-  const dcColor = isDisruptionMode ? color.risk.low : '#003e5f';
+  const dcColor = isDisruptionMode ? color.risk.low : '#44AADD';
   const restaurantColor = isDisruptionMode ? color.risk.low : '#FF2244';
 
   return (
@@ -49,7 +51,7 @@ export const LegendPanel: React.FC<LegendPanelProps> = ({ viewMode }) => {
 
       {/* Location type shapes */}
       <LegendRow kind="triangle" tint={supplierColor} label="Supplier" />
-      <LegendRow kind="square" tint={dcColor} label="Dist. Center" />
+      <LegendRow kind="square" tint={dcColor} label="Dist. Center" testID="legend-dc-swatch" />
       <LegendRow kind="dot" tint={restaurantColor} label="Restaurant" />
 
       {/* Risk color gradient - only shown in risk mode */}

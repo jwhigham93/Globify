@@ -25,31 +25,32 @@ export const SHAPE_CELL = 14;
 export interface ShapeProps {
   kind: ShapeKind;
   tint: string;
+  testID?: string;
 }
 
-export const Shape: React.FC<ShapeProps> = ({ kind, tint }) => {
+export const Shape: React.FC<ShapeProps> = ({ kind, tint, testID }) => {
   switch (kind) {
     case 'triangle':
-      return <View style={[s.triangle, { borderBottomColor: tint }]} />;
+      return <View testID={testID} style={[s.triangle, { borderBottomColor: tint }]} />;
     case 'square':
-      return <View style={[s.square, { backgroundColor: tint }]} />;
+      return <View testID={testID} style={[s.square, { backgroundColor: tint }]} />;
     case 'dot':
-      return <View style={[s.dot, { backgroundColor: tint }]} />;
+      return <View testID={testID} style={[s.dot, { backgroundColor: tint }]} />;
     case 'diamond':
-      return <View style={[s.diamond, { backgroundColor: tint }]} />;
+      return <View testID={testID} style={[s.diamond, { backgroundColor: tint }]} />;
     case 'bar':
-      return <View style={[s.bar, { backgroundColor: tint }]} />;
+      return <View testID={testID} style={[s.bar, { backgroundColor: tint }]} />;
     case 'dashed':
       return (
-        <View style={s.dashedWrap}>
+        <View testID={testID} style={s.dashedWrap}>
           <View style={[s.dash, { backgroundColor: tint }]} />
           <View style={[s.dash, { backgroundColor: tint }]} />
         </View>
       );
     case 'arrowRight':
-      return <View style={[s.arrowRight, { borderLeftColor: tint }]} />;
+      return <View testID={testID} style={[s.arrowRight, { borderLeftColor: tint }]} />;
     case 'arrowLeft':
-      return <View style={[s.arrowLeft, { borderRightColor: tint }]} />;
+      return <View testID={testID} style={[s.arrowLeft, { borderRightColor: tint }]} />;
   }
 };
 

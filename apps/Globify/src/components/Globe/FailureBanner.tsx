@@ -25,7 +25,7 @@ export const FailureBanner: React.FC<FailureBannerProps> = ({
       {/* testID on the visible block so layout assertions measure the banner,
           not the full-width container that centers it. */}
       <View style={bannerStyles.block} testID="failure-banner">
-        <Text style={bannerStyles.text}>
+        <Text style={bannerStyles.text} numberOfLines={1}>
           Failed to load {failures.join(', ')}
         </Text>
       </View>

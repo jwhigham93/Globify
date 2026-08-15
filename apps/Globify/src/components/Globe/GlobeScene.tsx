@@ -50,6 +50,7 @@ import { TileManager } from '../../services/tileManager';
 import { tileToLatLngBounds } from '../../services/tileCoordinates';
 import type { VehiclePosition } from '../../services/useVehiclePositions';
 import { buildAltitudeMap } from '../../services/collisionDetection';
+import { resolveClickTarget } from '../../services/resolveGlobeClick';
 import { StarryBackground } from './StarryBackground';
 import { Controls } from './Controls';
 import { TruckLayer } from './TruckLayer';
@@ -382,28 +383,22 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
 
       // Raycast against all children of the globe. TruckLayer parents its group
       // to the globe too, so truck hits come through the same traversal.
+      // Raycaster.intersectObjects does not consult Object3D.visible, so a
+      // hidden truck's mesh can still be hit — resolveClickTarget is told
+      // showTrucks explicitly and discards a truck hit when it's false.
       const intersects = raycaster.intersectObjects(
         globeRef.current.children,
         true
       );
 
-      for (const hit of intersects) {
-        // Walk up the parent chain looking for either a truck wrapper (ours) or
-        // a node carrying __data (three-globe attaches it to its wrapper groups).
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let obj: any = hit.object;
-        while (obj && obj !== globeRef.current) {
-          const vehicleId = obj.userData?.vehicleId as string | undefined;
-          if (vehicleId) {
-            onTruckClick?.(vehicleId);
-            return;
-          }
-          if (obj.__data) {
-            onPointClick?.(obj.__data as DataPoint);
-            return;
-          }
-          obj = obj.parent;
-        }
+      const target = resolveClickTarget(intersects, globeRef.current, showTrucks);
+      if (target?.type === 'truck') {
+        onTruckClick?.(target.vehicleId);
+        return;
+      }
+      if (target?.type === 'point') {
+        onPointClick?.(target.data);
+        return;
       }
 
       // No marker was hit — notify parent to deselect
@@ -417,7 +412,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
       canvas.removeEventListener('mousedown', handleMouseDown);
       canvas.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [onPointClick, onBackgroundClick, onTruckClick, isInitialized, camera, gl]);
+  }, [onPointClick, onBackgroundClick, onTruckClick, isInitialized, camera, gl, showTrucks]);
 
   // No auto-rotation - user controls the globe manually
 

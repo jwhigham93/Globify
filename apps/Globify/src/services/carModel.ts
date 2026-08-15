@@ -301,7 +301,7 @@ export function smoothAngle(
   return current + shortestAngleDelta(current, target) * (1 - Math.exp(-k * dt));
 }
 
-/** Same curve, for plain scalars (latitude / longitude). */
+/** Same curve, for plain non-cyclic scalars (latitude). */
 export function smoothScalar(
   current: number,
   target: number,
@@ -309,4 +309,25 @@ export function smoothScalar(
   dt: number,
 ): number {
   return current + (target - current) * (1 - Math.exp(-k * dt));
+}
+
+/**
+ * Signed shortest delta between two longitudes, in degrees, always in
+ * (-180, 180]. Longitude is cyclic like heading — without this, a vehicle
+ * crossing the antimeridian (179.9° → -179.9°, a real ~0.2° eastward move)
+ * would sweep almost the whole way around the globe instead of the short
+ * hop across the meridian.
+ */
+export function shortestLngDelta(from: number, to: number): number {
+  return ((((to - from + 180) % 360) + 360) % 360) - 180;
+}
+
+/** Same exponential-smoothing curve as smoothAngle, for longitude in degrees. */
+export function smoothLongitude(
+  current: number,
+  target: number,
+  k: number,
+  dt: number,
+): number {
+  return current + shortestLngDelta(current, target) * (1 - Math.exp(-k * dt));
 }

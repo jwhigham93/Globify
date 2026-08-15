@@ -39,7 +39,9 @@ export function useVehiclePositions(
   // No guard on an empty base URL: apiClient composes `${baseUrl}/api/v1...`
   // unconditionally, so an empty base means same-origin, which is how the rest
   // of the app loads data in dev. Bailing out here instead made the vehicle
-  // layer silently unreachable whenever API_BASE_URL was unset.
+  // layer silently unreachable whenever API_BASE_URL was unset. `apiBaseUrl`
+  // is `string | undefined`, though, so it's normalized to `''` first —
+  // otherwise "undefined" itself ends up as a URL path segment.
   useEffect(() => {
     let cancelled = false;
 
@@ -48,7 +50,7 @@ export function useVehiclePositions(
       ? { Authorization: `Bearer ${token}` }
       : {};
 
-    fetch(`${apiBaseUrl}/api/v1/vehicles/positions`, { headers })
+    fetch(`${apiBaseUrl ?? ''}/api/v1/vehicles/positions`, { headers })
       .then((res) => (res.ok ? res.json() : []))
       .then((data: PositionUpdate[]) => {
         if (cancelled || !Array.isArray(data)) return;

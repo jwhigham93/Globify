@@ -138,4 +138,20 @@ describe('useVehiclePositions', () => {
     expect(() => act(() => jest.runOnlyPendingTimers())).not.toThrow();
     expect(result.current.positions.size).toBe(0);
   });
+
+  it('treats an undefined API base URL as same-origin, not the literal string "undefined"', async () => {
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue({ ok: true, json: async () => [] } as Response);
+    try {
+      renderHook(() => useVehiclePositions('ws://test', undefined));
+
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+
+      const [url] = fetchSpy.mock.calls[0];
+      expect(url).toBe('/api/v1/vehicles/positions');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });
