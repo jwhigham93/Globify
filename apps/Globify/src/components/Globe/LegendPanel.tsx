@@ -3,42 +3,56 @@
  *
  * Always-visible compact legend showing location type shapes and colors.
  * Expands to show risk color gradient when in concentration-risk view mode.
+ *
+ * The ▲ ■ ● ◆ ━ ╌ glyphs are drawn as Views: symbol characters fall back to
+ * different fonts per platform, so their size and baseline never matched the
+ * label text they sat beside.
  */
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { color, border, space, type, surface } from '../ui/theme';
+import { ShapeCell } from '../ui/Shape';
+import type { ShapeKind } from '../ui/Shape';
 import type { ViewMode } from './types';
 
 export interface LegendPanelProps {
   viewMode: ViewMode;
 }
 
+const LegendRow: React.FC<{ kind: ShapeKind; tint: string; label: string; testID?: string }> = ({
+  kind,
+  tint,
+  label,
+  testID,
+}) => (
+  <View style={legendStyles.row}>
+    <ShapeCell kind={kind} tint={tint} testID={testID} />
+    <Text style={legendStyles.label}>{label}</Text>
+  </View>
+);
+
 export const LegendPanel: React.FC<LegendPanelProps> = ({ viewMode }) => {
   const isRiskMode = viewMode === 'concentration-risk';
   const isDisruptionMode = viewMode === 'disruption';
 
-  // Shape icon colors change per mode to match on-globe appearance
-  const supplierColor = isDisruptionMode ? '#22AA44' : '#FF9933';
-  const dcColor = isDisruptionMode ? '#22AA44' : '#003e5f';
-  const restaurantColor = isDisruptionMode ? '#22AA44' : '#FF2244';
+  // Shape colors change per mode to match on-globe appearance. DC matches the
+  // accent used in EntityDetailPanel/DisruptionPanel for distribution centers.
+  const supplierColor = isDisruptionMode ? color.risk.low : '#FF9933';
+  const dcColor = isDisruptionMode ? color.risk.low : '#44AADD';
+  const restaurantColor = isDisruptionMode ? color.risk.low : '#FF2244';
 
   return (
-    <View style={legendStyles.container}>
+    <View
+      style={[surface.panel, legendStyles.container]}
+      testID="legend-panel"
+    >
       <Text style={legendStyles.title}>Legend</Text>
 
       {/* Location type shapes */}
-      <View style={legendStyles.row}>
-        <Text style={[legendStyles.shapeIcon, { color: supplierColor }]}>▲</Text>
-        <Text style={legendStyles.label}>Supplier</Text>
-      </View>
-      <View style={legendStyles.row}>
-        <Text style={[legendStyles.shapeIcon, { color: dcColor }]}>■</Text>
-        <Text style={legendStyles.label}>Dist. Center</Text>
-      </View>
-      <View style={legendStyles.row}>
-        <Text style={[legendStyles.shapeIcon, { color: restaurantColor }]}>●</Text>
-        <Text style={legendStyles.label}>Restaurant</Text>
-      </View>
+      <LegendRow kind="triangle" tint={supplierColor} label="Supplier" />
+      <LegendRow kind="square" tint={dcColor} label="Dist. Center" testID="legend-dc-swatch" />
+      <LegendRow kind="dot" tint={restaurantColor} label="Restaurant" />
 
       {/* Risk color gradient - only shown in risk mode */}
       {isRiskMode && (
@@ -65,30 +79,12 @@ export const LegendPanel: React.FC<LegendPanelProps> = ({ viewMode }) => {
         <>
           <View style={legendStyles.divider} />
           <Text style={legendStyles.subtitle}>Disruption</Text>
-          <View style={legendStyles.row}>
-            <Text style={[legendStyles.shapeIcon, { color: '#22AA44' }]}>◆</Text>
-            <Text style={legendStyles.label}>Healthy</Text>
-          </View>
-          <View style={legendStyles.row}>
-            <Text style={[legendStyles.shapeIcon, { color: '#CC2222' }]}>◼</Text>
-            <Text style={legendStyles.label}>Disabled</Text>
-          </View>
-          <View style={legendStyles.row}>
-            <Text style={[legendStyles.shapeIcon, { color: '#EE8800' }]}>●</Text>
-            <Text style={legendStyles.label}>Reduced Supply</Text>
-          </View>
-          <View style={legendStyles.row}>
-            <Text style={[legendStyles.shapeIcon, { color: '#CC2222' }]}>━</Text>
-            <Text style={legendStyles.label}>Broken Route</Text>
-          </View>
-          <View style={legendStyles.row}>
-            <Text style={[legendStyles.shapeIcon, { color: '#EE8800' }]}>╌</Text>
-            <Text style={legendStyles.label}>Degraded Route</Text>
-          </View>
-          <View style={legendStyles.row}>
-            <Text style={[legendStyles.shapeIcon, { color: '#FF4444' }]}>●</Text>
-            <Text style={legendStyles.label}>Orphaned</Text>
-          </View>
+          <LegendRow kind="diamond" tint={color.risk.low} label="Healthy" />
+          <LegendRow kind="square" tint={color.risk.high} label="Disabled" />
+          <LegendRow kind="dot" tint="#EE8800" label="Reduced Supply" />
+          <LegendRow kind="bar" tint={color.risk.high} label="Broken Route" />
+          <LegendRow kind="dashed" tint="#EE8800" label="Degraded Route" />
+          <LegendRow kind="dot" tint="#FF4444" label="Orphaned" />
         </>
       )}
     </View>
@@ -97,57 +93,36 @@ export const LegendPanel: React.FC<LegendPanelProps> = ({ viewMode }) => {
 
 const legendStyles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    bottom: 74,
-    right: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
   },
   title: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 9,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 6,
+    ...type.label,
+    marginBottom: space.xs + 2,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: space.sm,
     marginBottom: 3,
   },
-  shapeIcon: {
-    fontSize: 12,
-    width: 14,
-    textAlign: 'center',
-  },
   label: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 11,
+    ...type.body,
+    color: color.textDim,
   },
   divider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    marginVertical: 6,
+    ...surface.divider,
+    marginVertical: space.xs + 2,
   },
   subtitle: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 9,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
+    ...type.label,
+    marginBottom: space.xs,
   },
   gradientRow: {
     flexDirection: 'row',
     height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
+    borderWidth: border.hair,
+    borderColor: color.lineDim,
   },
   gradientBlock: {
     flex: 1,
@@ -158,9 +133,10 @@ const legendStyles = StyleSheet.create({
     marginTop: 2,
   },
   gradientLabel: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 9,
+    ...type.label,
+    letterSpacing: 0,
   },
 });
+
 
 export default LegendPanel;

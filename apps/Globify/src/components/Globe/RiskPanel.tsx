@@ -6,10 +6,10 @@
  */
 
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { color, border, space, type, surface } from '../ui/theme';
+import { useHudLayout } from '../ui/layout';
 import type { NetworkRiskMetrics } from './types';
-
-const NARROW_BREAKPOINT = 600;
 
 export interface RiskPanelProps {
   metrics: NetworkRiskMetrics;
@@ -20,31 +20,33 @@ export interface RiskPanelProps {
  * Get color for a risk score value
  */
 function getRiskColor(score: number): string {
-  if (score >= 35) return '#CC0000';
-  if (score >= 20) return '#CCCC00';
-  return '#00CC00';
+  if (score >= 35) return color.risk.high;
+  if (score >= 20) return color.risk.med;
+  return color.risk.low;
 }
 
 /**
  * Get color for a diversification score (inverted from risk)
  */
 function getDiversificationColor(score: number): string {
-  if (score >= 70) return '#00CC00';
-  if (score >= 30) return '#CCCC00';
-  return '#CC0000';
+  if (score >= 70) return color.risk.low;
+  if (score >= 30) return color.risk.med;
+  return color.risk.high;
 }
 
 /**
- * Risk level badge
+ * Risk level badge — a solid inverted block rather than a translucent tint.
  */
 const RiskBadge: React.FC<{ level: string }> = ({ level }) => {
-  const color =
-    level === 'high' ? '#CC0000' : level === 'medium' ? '#CCCC00' : '#00CC00';
+  const fill =
+    level === 'high'
+      ? color.risk.high
+      : level === 'medium'
+      ? color.risk.med
+      : color.risk.low;
   return (
-    <View style={[panelStyles.badge, { backgroundColor: color + '33' }]}>
-      <Text style={[panelStyles.badgeText, { color }]}>
-        {level.toUpperCase()}
-      </Text>
+    <View style={[panelStyles.badge, { backgroundColor: fill }]}>
+      <Text style={panelStyles.badgeText}>{level.toUpperCase()}</Text>
     </View>
   );
 };
@@ -57,22 +59,33 @@ const RiskBar: React.FC<{ score: number; maxScore?: number }> = ({
   maxScore = 50,
 }) => {
   const width = Math.min((score / maxScore) * 100, 100);
-  const color = getRiskColor(score);
   return (
     <View style={panelStyles.barContainer}>
-      <View style={[panelStyles.bar, { width: `${width}%`, backgroundColor: color }]} />
+      <View
+        style={[
+          panelStyles.bar,
+          { width: `${width}%`, backgroundColor: getRiskColor(score) },
+        ]}
+      />
     </View>
   );
 };
 
 export const RiskPanel: React.FC<RiskPanelProps> = ({ metrics, visible }) => {
-  const { width: screenWidth } = useWindowDimensions();
-  const isNarrow = screenWidth < NARROW_BREAKPOINT;
+  const { slot, isNarrow } = useHudLayout();
 
   if (!visible) return null;
 
   return (
-    <View style={isNarrow ? panelStyles.containerNarrow : panelStyles.container}>
+    <View
+      style={[
+        surface.panel,
+        panelStyles.container,
+        isNarrow && panelStyles.containerNarrow,
+        slot('top-right'),
+      ]}
+      testID="risk-panel"
+    >
       <ScrollView style={panelStyles.scroll} showsVerticalScrollIndicator={false}>
         {/* Network Score */}
         <Text style={panelStyles.title}>Network Risk</Text>
@@ -139,115 +152,92 @@ export const RiskPanel: React.FC<RiskPanelProps> = ({ metrics, visible }) => {
 
 const panelStyles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
     width: 280,
     maxHeight: '80%',
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
     overflow: 'hidden',
   },
   containerNarrow: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
     width: 220,
     maxHeight: '55%',
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    overflow: 'hidden',
   },
   scroll: {
-    padding: 14,
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+    // Item rows carry a bottom margin; a full pad here would stack with it.
+    paddingBottom: space.xs,
   },
   title: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    ...type.title,
+    marginBottom: space.sm,
   },
   scoreRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+    gap: space.md,
+    marginBottom: space.lg,
   },
   bigScore: {
-    color: '#ffffff',
-    fontSize: 36,
-    fontWeight: '800',
+    ...type.hero,
   },
   scoreLabel: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 12,
+    ...type.body,
+    color: color.textDim,
   },
   scoreSubLabel: {
-    color: 'rgba(255, 255, 255, 0.4)',
-    fontSize: 11,
+    ...type.bodyDim,
+    color: color.textFaint,
   },
   sectionTitle: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginTop: 12,
-    marginBottom: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    paddingTop: 12,
+    ...type.label,
+    marginTop: space.md,
+    marginBottom: space.sm,
+    borderTopWidth: border.hair,
+    borderTopColor: color.lineDim,
+    paddingTop: space.md,
   },
   itemRow: {
-    marginBottom: 10,
+    marginBottom: space.sm + 2,
   },
   itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: space.xs,
   },
   itemName: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
+    ...type.body,
+    fontWeight: '700',
     flex: 1,
-    marginRight: 8,
+    marginRight: space.sm,
   },
   itemDetail: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 10,
+    ...type.bodyDim,
     marginTop: 3,
   },
   badge: {
-    paddingHorizontal: 6,
+    paddingHorizontal: space.xs + 2,
     paddingVertical: 2,
-    borderRadius: 4,
   },
   badgeText: {
+    fontFamily: type.label.fontFamily,
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.5,
+    color: color.inverse,
   },
   barContainer: {
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 2,
+    ...surface.inset,
+    height: 6,
   },
   bar: {
-    height: 4,
-    borderRadius: 2,
+    height: '100%',
   },
   divScore: {
+    fontFamily: type.value.fontFamily,
     fontSize: 14,
     fontWeight: '800',
   },
 });
+
 
 export default RiskPanel;

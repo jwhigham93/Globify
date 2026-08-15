@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useMemo, useCallback, useEffect, Suspense } from 'react';
-import { View, Platform, Text, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Platform, Text } from 'react-native';
 import { Canvas } from '@react-three/fiber';
 import type { GlobeVisualizationProps, ViewMode, DataPoint, SelectedEntity, NetworkRiskMetrics, DisruptionMetrics, RoutePathSegment } from './types';
 import { CAMERA_POSITION, CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, CONTROLS_HINT_HIDE_DISTANCE, ROUTE_PATH_COMPLETED_STROKE, ROUTE_PATH_REMAINING_STROKE, TRUCK_COLOR_LIVE, TRUCK_COLOR_STALE, TRUCK_COLOR_LOST } from './constants';
@@ -15,13 +15,10 @@ import { styles } from './styles';
 import { LoadingFallback } from './LoadingFallback';
 import { GlobeScene } from './GlobeScene';
 import { GlobeErrorBoundary } from './GlobeErrorBoundary';
-import { ViewModeToggle } from './ViewModeToggle';
-import { RiskPanel } from './RiskPanel';
-import { LegendPanel } from './LegendPanel';
-import { DisruptionPanel } from './DisruptionPanel';
-import { EntityDetailPanel } from './EntityDetailPanel';
-import { TruckDetailPanel } from './TruckDetailPanel';
-import { TruckLayerToggle } from './TruckLayerToggle';
+import { GlobeHud } from './GlobeHud';
+import { Loader } from '../ui/Loader';
+import { HudContext } from '../ui/layout';
+import type { HudState } from '../ui/layout';
 import { applyRiskColorsToPoints, applyRiskColorsToArcs } from '../../services/riskVisuals';
 import { applyDisruptionToPoints, applyDisruptionToArcs } from '../../services/disruptionVisuals';
 import { applySelectionToPoints, applySelectionToArcs, SELECTION_DIM_NODE_COLOR, SELECTION_DIM_ARC_COLOR, SELECTION_DIM_STROKE_MULTIPLIER } from '../../services/selectionHighlight';
@@ -167,8 +164,6 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
       setError(new Error('WebGL is not supported in this browser'));
     }
   }, []);
-
-  const isMobile = Platform.OS !== 'web';
 
   // ── Network Risk Metrics ─────────────────────────────────────────
   const {
@@ -405,7 +400,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
       setSelectedEntity(null);
       setSelectedLocationId((prev) => (prev === pointId ? null : pointId));
     },
-    [viewMode]
+    [viewMode, locationsById, inboundByLocationId]
   );
 
   // Reset all disruption state
@@ -431,6 +426,16 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
     setZoomTarget(null);
   }, []);
 
+  // Published to every overlay so slot offsets are computed in one place rather
+  // than each panel guessing what else is on screen.
+  const hudState: HudState = useMemo(
+    () => ({
+      bannerVisible: failedQueries.length > 0,
+      sheetOpen: !!(activeEntity || selectedTruck),
+    }),
+    [failedQueries.length, activeEntity, selectedTruck],
+  );
+
   if (error) {
     return (
       <View style={[styles.container, { backgroundColor }]} testID={testID}>
@@ -450,8 +455,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
       {/* Show loading overlay while texture is downloading */}
       {isTextureLoading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#ffffff" />
-          <Text style={styles.loadingText}>Loading Earth texture...</Text>
+          <Loader label="Loading Earth texture..." />
         </View>
       )}
       <GlobeErrorBoundary>
@@ -486,143 +490,32 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
           </Canvas>
         </Suspense>
       </GlobeErrorBoundary>
-      {/* Star spin toggle button */}
-      <TouchableOpacity 
-        style={styles.spinButton} 
-        onPress={toggleStarsSpinning}
-        activeOpacity={0.7}
-      >
-        <Text style={[
-          styles.spinButtonText,
-          isStarsSpinning ? styles.pauseIcon : styles.playIcon
-        ]}>
-          {isStarsSpinning ? '⏸' : '▶'}
-        </Text>
-      </TouchableOpacity>
-      {/* Location type and risk color legend */}
-      <LegendPanel viewMode={viewMode} />
-      {/* Disruption mode instruction hint */}
-      {viewMode === 'disruption' && disabledNodeIds.size === 0 && (
-        <View
-          style={{
-            position: 'absolute',
-            bottom: 74,
-            left: 0,
-            right: 0,
-            alignItems: 'center',
-            pointerEvents: 'none',
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: 'rgba(0, 0, 0, 0.8)',
-              borderRadius: 20,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              borderWidth: 1,
-              borderColor: 'rgba(34, 170, 68, 0.4)',
-            }}
-          >
-            <Text
-              style={{
-                color: 'rgba(255, 255, 255, 0.85)',
-                fontSize: 12,
-                fontWeight: '600',
-                textAlign: 'center',
-              }}
-            >
-              {isMobile ? 'Tap' : 'Click'} a supplier{' '}
-              <Text style={{ color: '#22AA44' }}>▲</Text> or DC{' '}
-              <Text style={{ color: '#22AA44' }}>■</Text> to simulate a
-              disruption
-            </Text>
-          </View>
-        </View>
-      )}
-      {/* Controls hint — hidden when zoomed in */}
-      {cameraDistance > CONTROLS_HINT_HIDE_DISTANCE && (
-        <View
-          style={{
-            position: 'absolute',
-            bottom: 16,
-            left: 0,
-            right: 0,
-            alignItems: 'center',
-            pointerEvents: 'none',
-          }}
-        >
-          <Text
-            style={{
-              color: 'rgba(255, 255, 255, 0.5)',
-              fontSize: 11,
-              fontWeight: '400',
-              letterSpacing: 0.5,
-              textAlign: 'center',
-            }}
-          >
-            {isMobile
-              ? 'Pinch to zoom · Swipe to rotate · Tap to inspect'
-              : 'Scroll to zoom · Drag to rotate · Click to inspect'}
-          </Text>
-        </View>
-      )}
-      {/* Bottom-right button row: truck toggle + view mode toggle */}
-      <View style={{ position: 'absolute', bottom: 20, right: 20, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <TruckLayerToggle
-          visible={showTrucks}
-          onToggle={toggleTrucks}
+      <HudContext.Provider value={hudState}>
+        <GlobeHud
+          viewMode={viewMode}
+          onToggleViewMode={toggleViewMode}
+          isStarsSpinning={isStarsSpinning}
+          onToggleStarsSpinning={toggleStarsSpinning}
+          showTrucks={showTrucks}
+          onToggleTrucks={toggleTrucks}
           vehicleCount={vehiclePositions.size}
+          failedQueries={failedQueries}
+          showDisruptionHint={viewMode === 'disruption' && disabledNodeIds.size === 0}
+          showControlsHint={cameraDistance > CONTROLS_HINT_HIDE_DISTANCE}
+          networkRiskMetrics={networkRiskMetrics}
+          riskPanelVisible={viewMode === 'concentration-risk' && isRiskSuccess}
+          disruptionMetrics={disruptionMetrics}
+          disruptionPanelVisible={
+            viewMode === 'disruption' && disabledNodeIds.size > 0 && isDisruptionSuccess
+          }
+          onResetDisruptions={handleResetAll}
+          activeEntity={activeEntity}
+          onCloseEntity={handleCloseEntity}
+          onZoomToExpand={handleZoomToExpand}
+          selectedTruck={selectedTruck}
+          onCloseTruck={handleCloseTruck}
         />
-        <ViewModeToggle viewMode={viewMode} onToggle={toggleViewMode} />
-      </View>
-      {/* Backend data failure banner */}
-      {failedQueries.length > 0 && (
-        <View
-          style={{
-            position: 'absolute',
-            top: 16,
-            left: 0,
-            right: 0,
-            alignItems: 'center',
-            pointerEvents: 'none',
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: 'rgba(0, 0, 0, 0.8)',
-              borderRadius: 20,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              borderWidth: 1,
-              borderColor: 'rgba(255, 107, 107, 0.5)',
-            }}
-          >
-            <Text style={{ color: '#ff6b6b', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
-              Failed to load {failedQueries.join(', ')}
-            </Text>
-          </View>
-        </View>
-      )}
-      {/* Risk summary panel — only rendered from a successful query, so loading
-          and failure states never appear as zeroed metrics */}
-      <RiskPanel
-        metrics={networkRiskMetrics}
-        visible={viewMode === 'concentration-risk' && isRiskSuccess}
-      />
-      {/* Disruption impact panel — only rendered from a successful simulation */}
-      <DisruptionPanel
-        metrics={disruptionMetrics}
-        visible={viewMode === 'disruption' && disabledNodeIds.size > 0 && isDisruptionSuccess}
-        onResetAll={handleResetAll}
-      />
-      {/* Entity detail inspect panel */}
-      <EntityDetailPanel
-        entity={activeEntity}
-        onClose={handleCloseEntity}
-        onZoomToExpand={handleZoomToExpand}
-      />
-      {/* Truck detail panel */}
-      <TruckDetailPanel vehicle={selectedTruck} onClose={handleCloseTruck} />
+      </HudContext.Provider>
     </View>
   );
 };

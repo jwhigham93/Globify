@@ -46,6 +46,23 @@ const networkRisk = {
   ],
 };
 
+/**
+ * Vehicles spread across the visible face with distinct headings, so the truck
+ * layer has something to render and orient.
+ */
+export const vehiclePositions = Array.from({ length: 6 }, (_, i) => ({
+  vehicleId: `veh-${i}`,
+  vehicleName: `Truck ${i + 1}`,
+  lat: 35 + (i % 3) * 3.5,
+  lng: -100 + Math.floor(i / 3) * 9 + (i % 3) * 3,
+  heading: i * 60,
+  speedMph: 55,
+  recordedAt: new Date().toISOString(),
+  gpsStatus: ['live', 'stale', 'lost'][i % 3],
+  originName: 'Kansas City DC',
+  destinationName: 'Store #1042',
+}));
+
 export async function mockApi(page: Page): Promise<void> {
   await page.route('**/api/v1/supply-chain/visualization', (route) =>
     route.fulfill({ json: { locations, routes } }),
@@ -77,5 +94,11 @@ export async function mockApi(page: Page): Promise<void> {
     route.fulfill({
       json: { originLat: 39.0, originLng: -94.5, destinationLat: 38.6, destinationLng: -90.2 },
     }),
+  );
+
+  // Registered last so it wins over the catch-all above — Playwright matches
+  // the most recently registered route first.
+  await page.route('**/api/v1/vehicles/positions', (route) =>
+    route.fulfill({ json: vehiclePositions }),
   );
 }

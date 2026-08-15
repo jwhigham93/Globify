@@ -3,8 +3,17 @@
  */
 
 import React from 'react';
+import { StyleSheet } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ViewModeToggle } from './ViewModeToggle';
+import { color } from '../ui/theme';
+
+/** Resolve the effective backgroundColor from a style array/prop. */
+function flatBackground(node: { props: { style?: unknown } }): string | undefined {
+  const flat = StyleSheet.flatten(node.props.style as ViewStyle) as ViewStyle;
+  return flat?.backgroundColor as string | undefined;
+}
 
 describe('ViewModeToggle', () => {
   it('renders without crashing', () => {
@@ -45,22 +54,22 @@ describe('ViewModeToggle', () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
-  it('shows warning icon in standard and risk modes', () => {
-    const { getByText: getStd } = render(
+  // Mode is carried by the label plus a solid fill, not by an icon glyph:
+  // ⚠/⚡ resolved to a different font on each platform.
+  it('fills the button when a non-standard mode is active', () => {
+    const { getByTestId: getStd } = render(
       <ViewModeToggle viewMode="standard" onToggle={jest.fn()} />
     );
-    expect(getStd('⚠')).toBeTruthy();
+    expect(flatBackground(getStd('view-mode-toggle'))).toBe(color.buttonFill);
 
-    const { getByText: getRisk } = render(
+    const { getByTestId: getRisk } = render(
       <ViewModeToggle viewMode="concentration-risk" onToggle={jest.fn()} />
     );
-    expect(getRisk('⚠')).toBeTruthy();
-  });
+    expect(flatBackground(getRisk('view-mode-toggle'))).toBe(color.warn);
 
-  it('shows lightning icon in disruption mode', () => {
-    const { getByText } = render(
+    const { getByTestId: getDisruption } = render(
       <ViewModeToggle viewMode="disruption" onToggle={jest.fn()} />
     );
-    expect(getByText('⚡')).toBeTruthy();
+    expect(flatBackground(getDisruption('view-mode-toggle'))).toBe(color.danger);
   });
 });

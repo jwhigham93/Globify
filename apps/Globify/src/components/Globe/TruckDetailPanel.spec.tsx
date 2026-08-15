@@ -108,10 +108,10 @@ describe('TruckDetailPanel', () => {
 
   it('calls onClose when close button is pressed', () => {
     const onClose = jest.fn();
-    const { getByText } = render(
+    const { getByTestId } = render(
       <TruckDetailPanel vehicle={mockVehicle} onClose={onClose} />,
     );
-    fireEvent.press(getByText('✕'));
+    fireEvent.press(getByTestId('truck-detail-close'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

@@ -7,7 +7,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
 } from 'react-native';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { GlobeVisualization } from '../components/Globe/GlobeVisualization';
@@ -18,6 +17,8 @@ import { queryClient } from '../hooks/queries/queryClient';
 import { useSupplyChainData } from '../hooks/queries/useSupplyChainData';
 import { AuthProvider, useAuth } from './AuthProvider';
 import { SignInScreen } from './SignInScreen';
+import { Loader } from '../components/ui/Loader';
+import { color, space, type, surface } from '../components/ui/theme';
 
 declare global {
   interface Window { __hideLoadingShell?: () => void; }
@@ -47,11 +48,11 @@ const AppContent = () => {
   const arcs = useMemo(() => transformToArcs(locations, routes), [locations, routes]);
   const points = useMemo(() => transformToDataPoints(locations), [locations]);
 
-  // Show auth loading spinner
+  // Show auth loading indicator
   if (authLoading) {
     return (
       <View style={[styles.centeredContainer, { backgroundColor: DEFAULT_BACKGROUND_COLOR }]}>
-        <ActivityIndicator size="large" color="#ffffff" />
+        <Loader />
       </View>
     );
   }
@@ -65,8 +66,7 @@ const AppContent = () => {
   if (isLoading) {
     return (
       <View style={[styles.centeredContainer, { backgroundColor: DEFAULT_BACKGROUND_COLOR }]}>
-        <ActivityIndicator size="large" color="#ffffff" />
-        <Text style={styles.loadingText}>Loading supply chain data…</Text>
+        <Loader label="Loading supply chain data…" />
       </View>
     );
   }
@@ -88,13 +88,11 @@ const AppContent = () => {
     <GlobeVisualization dataPoints={points} arcsData={arcs} testID="globe-visualization" />
   );
 
-  // On web, use a div container for proper iframe rendering
+  // On web, use a div container for proper iframe rendering. Sizing lives in
+  // the .globify-root class in public/index.html — an inline style cannot
+  // express the `height: 100%; height: 100dvh` fallback pair that iOS needs.
   if (Platform.OS === 'web') {
-    return (
-      <div style={{ width: '100vw', height: '100vh', backgroundColor: DEFAULT_BACKGROUND_COLOR }}>
-        {globeContent}
-      </div>
-    );
+    return <div className="globify-root">{globeContent}</div>;
   }
 
   // Native platforms use SafeAreaView
@@ -125,33 +123,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
   },
-  loadingText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 14,
-    marginTop: 16,
-  },
   errorText: {
-    color: '#ff6b6b',
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
+    ...type.title,
+    color: color.danger,
+    fontSize: 16,
+    marginBottom: space.sm,
   },
   errorDetail: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 13,
-    marginBottom: 24,
+    ...type.body,
+    color: color.textDim,
+    marginBottom: space.xl,
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#22AA44',
-    borderRadius: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    ...surface.button,
+    ...surface.buttonActive,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.md,
   },
   retryText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    ...type.buttonActiveLabel,
   },
 });
 

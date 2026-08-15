@@ -1,4 +1,6 @@
 import { StyleSheet } from 'react-native';
+import { color, type } from '../ui/theme';
+import { Z } from '../ui/layout';
 
 export const styles = StyleSheet.create({
   container: {
@@ -11,7 +13,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000000',
+    backgroundColor: color.bg,
   },
   loadingOverlay: {
     position: 'absolute',
@@ -21,42 +23,20 @@ export const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    zIndex: 10,
+    backgroundColor: color.surfaceSolid,
+    zIndex: Z.loading,
   },
   loadingText: {
-    color: '#ffffff',
+    ...type.label,
+    color: color.text,
     marginTop: 10,
-    fontSize: 16,
+    fontSize: 12,
   },
   errorText: {
-    color: '#ff6b6b',
-    fontSize: 16,
+    ...type.body,
+    color: color.danger,
+    fontSize: 14,
     textAlign: 'center',
     padding: 20,
-  },
-  spinButton: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  spinButtonText: {
-    color: '#ffffff',
-    fontSize: 18,
-  },
-  pauseIcon: {
-    fontSize: 22,
-    marginTop: -5,
-  },
-  playIcon: {
-    marginLeft: 3,
   },
 });

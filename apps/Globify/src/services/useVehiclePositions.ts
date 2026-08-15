@@ -12,6 +12,13 @@ export interface VehiclePosition extends PositionUpdate {
 }
 
 /**
+ * Window over which incoming pings are batched before committing to state.
+ * Roughly one frame — long enough to absorb a whole broadcast burst, short
+ * enough to be imperceptible.
+ */
+const POSITION_FLUSH_MS = 16;
+
+/**
  * React hook that subscribes to the GPS WebSocket stream and maintains
  * a map of vehicle positions, automatically updating on new pings.
  *
@@ -27,9 +34,15 @@ export function useVehiclePositions(
   const [connected, setConnected] = useState(false);
   const serviceRef = useRef<GpsStreamService | null>(null);
 
-  // Load initial positions from REST endpoint
+  // Load initial positions from REST endpoint.
+  //
+  // No guard on an empty base URL: apiClient composes `${baseUrl}/api/v1...`
+  // unconditionally, so an empty base means same-origin, which is how the rest
+  // of the app loads data in dev. Bailing out here instead made the vehicle
+  // layer silently unreachable whenever API_BASE_URL was unset. `apiBaseUrl`
+  // is `string | undefined`, though, so it's normalized to `''` first —
+  // otherwise "undefined" itself ends up as a URL path segment.
   useEffect(() => {
-    if (!apiBaseUrl) return;
     let cancelled = false;
 
     const token = getToken();
@@ -37,10 +50,10 @@ export function useVehiclePositions(
       ? { Authorization: `Bearer ${token}` }
       : {};
 
-    fetch(`${apiBaseUrl}/api/v1/vehicles/positions`, { headers })
+    fetch(`${apiBaseUrl ?? ''}/api/v1/vehicles/positions`, { headers })
       .then((res) => (res.ok ? res.json() : []))
       .then((data: PositionUpdate[]) => {
-        if (cancelled) return;
+        if (cancelled || !Array.isArray(data)) return;
         const map = new Map<string, VehiclePosition>();
         for (const p of data) {
           map.set(p.vehicleId, { ...p, updatedAt: Date.now() });
@@ -56,9 +69,39 @@ export function useVehiclePositions(
     };
   }, [apiBaseUrl]);
 
+  // The server broadcasts one message per vehicle, so a tick arrives as a burst
+  // of ~20. Committing each one separately meant 20 renders — and, downstream,
+  // 20 rebuilds of the whole marker layer. Buffer them and commit once.
+  const pendingRef = useRef<Map<string, VehiclePosition>>(new Map());
+  const flushHandleRef = useRef<number | null>(null);
+
+  const flush = useCallback(() => {
+    flushHandleRef.current = null;
+    const pending = pendingRef.current;
+    if (pending.size === 0) return;
+    // Hand the buffer off and start a fresh one. The state updater runs lazily
+    // during render, so clearing this map in place afterwards would empty it
+    // before the merge ever reads it.
+    pendingRef.current = new Map();
+    setPositions((prev) => {
+      const next = new Map(prev);
+      for (const [id, position] of pending) next.set(id, position);
+      return next;
+    });
+  }, []);
+
+  const scheduleFlush = useCallback(() => {
+    if (flushHandleRef.current !== null) return;
+    // A timeout rather than requestAnimationFrame: each socket message arrives
+    // in its own task, so the window has to span tasks to batch a burst, and a
+    // frame callback does not run at all when the frame loop is idle.
+    flushHandleRef.current = setTimeout(flush, POSITION_FLUSH_MS) as unknown as number;
+  }, [flush]);
+
   // Handle incoming WebSocket message
-  const handleMessage = useCallback((msg: WsMessage) => {
-    if (msg.type === 'position_update') {
+  const handleMessage = useCallback(
+    (msg: WsMessage) => {
+      if (msg.type !== 'position_update') return;
       const raw = msg.data as Record<string, unknown>;
       if (
         typeof raw?.vehicleId !== 'string' ||
@@ -71,13 +114,14 @@ export function useVehiclePositions(
         return;
       }
       const update = raw as unknown as PositionUpdate;
-      setPositions((prev) => {
-        const next = new Map(prev);
-        next.set(update.vehicleId, { ...update, updatedAt: Date.now() });
-        return next;
+      pendingRef.current.set(update.vehicleId, {
+        ...update,
+        updatedAt: Date.now(),
       });
-    }
-  }, []);
+      scheduleFlush();
+    },
+    [scheduleFlush],
+  );
 
   // WebSocket lifecycle
   useEffect(() => {
@@ -100,6 +144,11 @@ export function useVehiclePositions(
       svc.dispose();
       serviceRef.current = null;
       setConnected(false);
+      if (flushHandleRef.current !== null) {
+        clearTimeout(flushHandleRef.current);
+        flushHandleRef.current = null;
+      }
+      pendingRef.current.clear();
     };
   }, [wsUrl, handleMessage]);
 

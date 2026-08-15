@@ -43,10 +43,10 @@ describe('TruckLayerToggle', () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
-  it('renders truck emoji', () => {
-    const { getByText } = render(
+  it('renders as a single tappable control', () => {
+    const { getByTestId } = render(
       <TruckLayerToggle visible={false} onToggle={jest.fn()} vehicleCount={3} />,
     );
-    expect(getByText('🚚')).toBeTruthy();
+    expect(getByTestId('truck-layer-toggle')).toBeTruthy();
   });
 });

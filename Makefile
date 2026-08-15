@@ -49,7 +49,10 @@ dev: set-api-url
 		sleep 1; \
 	done
 	@echo "Starting Globify at http://localhost:8081 ..."
-	npx nx serve Globify --web
+	@# Web reads config via EXPO_PUBLIC_API_BASE_URL, not app.json's `extra` —
+	@# Constants.expoConfig.extra never populates on Metro web, so set-api-url's
+	@# app.json edit above is a no-op for this target (native builds still use it).
+	EXPO_PUBLIC_API_BASE_URL=http://localhost:8080 npx nx serve Globify --web
 
 ## Alias for `make dev`
 fullstack: dev
