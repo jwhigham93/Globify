@@ -83,11 +83,16 @@ INSERT INTO gps_pings (vehicle_id, lat, lng, heading, speed_mph, recorded_at) VA
   ('a1000000-0000-0000-0000-000000000008', 28.5383, -81.3792, 35, 58, now() - interval '1 min'),
 
 -- T009: I-65 Chicago→Indianapolis
-  ('a1000000-0000-0000-0000-000000000009', 41.8781, -87.6298, 190, 50, now() - interval '20 min'),
-  ('a1000000-0000-0000-0000-000000000009', 41.5200, -87.4500, 188, 62, now() - interval '15 min'),
-  ('a1000000-0000-0000-0000-000000000009', 41.1000, -87.2000, 185, 68, now() - interval '10 min'),
-  ('a1000000-0000-0000-0000-000000000009', 40.6000, -86.8000, 182, 70, now() - interval '5 min'),
-  ('a1000000-0000-0000-0000-000000000009', 39.7684, -86.1581, 180, 65, now() - interval '1 min'),
+-- Permanently pinned "stale" demo vehicle — RunGPSSimulator (gps_simulator.go)
+-- refreshes this vehicle's ping every tick with a deliberately backdated
+-- recorded_at, so it always reads GpsStatusStale (5-15 min) and never drifts
+-- to live or lost. Seeded ~10 min old here too, so a fresh DB shows it before
+-- the first simulator tick even runs.
+  ('a1000000-0000-0000-0000-000000000009', 41.8781, -87.6298, 190, 50, now() - interval '30 min'),
+  ('a1000000-0000-0000-0000-000000000009', 41.5200, -87.4500, 188, 62, now() - interval '25 min'),
+  ('a1000000-0000-0000-0000-000000000009', 41.1000, -87.2000, 185, 68, now() - interval '20 min'),
+  ('a1000000-0000-0000-0000-000000000009', 40.6000, -86.8000, 182, 70, now() - interval '15 min'),
+  ('a1000000-0000-0000-0000-000000000009', 39.7684, -86.1581, 180, 65, now() - interval '10 min'),
 
 -- T010: I-25 Denver→Colorado Springs
   ('a1000000-0000-0000-0000-000000000010', 39.7392, -104.9903, 180, 55, now() - interval '20 min'),
@@ -118,11 +123,15 @@ INSERT INTO gps_pings (vehicle_id, lat, lng, heading, speed_mph, recorded_at) VA
   ('a1000000-0000-0000-0000-000000000013', 29.2108, -81.0228, 48, 55, now() - interval '1 min'),
 
 -- T014: I-95 DC→Baltimore
-  ('a1000000-0000-0000-0000-000000000014', 38.9072, -77.0369, 30, 45, now() - interval '20 min'),
-  ('a1000000-0000-0000-0000-000000000014', 39.0000, -76.9500, 32, 55, now() - interval '15 min'),
-  ('a1000000-0000-0000-0000-000000000014', 39.1000, -76.8500, 34, 60, now() - interval '10 min'),
-  ('a1000000-0000-0000-0000-000000000014', 39.2000, -76.7500, 30, 58, now() - interval '5 min'),
-  ('a1000000-0000-0000-0000-000000000014', 39.2904, -76.6122, 28, 52, now() - interval '1 min'),
+-- Permanently pinned "lost" demo vehicle — RunGPSSimulator (gps_simulator.go)
+-- never pings this vehicle again after seeding, so its age grows unbounded
+-- and it reads GpsStatusLost (>15 min) forever. Seeded ~25 min old here too,
+-- so a fresh DB shows it before the first simulator tick even runs.
+  ('a1000000-0000-0000-0000-000000000014', 38.9072, -77.0369, 30, 45, now() - interval '45 min'),
+  ('a1000000-0000-0000-0000-000000000014', 39.0000, -76.9500, 32, 55, now() - interval '40 min'),
+  ('a1000000-0000-0000-0000-000000000014', 39.1000, -76.8500, 34, 60, now() - interval '35 min'),
+  ('a1000000-0000-0000-0000-000000000014', 39.2000, -76.7500, 30, 58, now() - interval '30 min'),
+  ('a1000000-0000-0000-0000-000000000014', 39.2904, -76.6122, 28, 52, now() - interval '25 min'),
 
 -- T015: I-35 Kansas City→Oklahoma City
   ('a1000000-0000-0000-0000-000000000015', 39.0997, -94.5786, 210, 60, now() - interval '20 min'),
