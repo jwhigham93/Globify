@@ -96,7 +96,7 @@ cdk deploy --all -c profile=ultra-lite
 - **Auth middleware**: validates Cognito JWT (`internal/auth/cognito.go`)
 - **Database**: PostgreSQL — migrations in `migrations/`, sqlc queries in `sqlc/queries/`
 - **Risk scoring**: supplier concentration (`internal/risk/`), disruption analysis (`internal/disruption/`)
-- **WebSocket hub**: `internal/ws/hub.go` — broadcasts GPS pings to connected clients
+- **WebSocket hub**: `internal/wsgorilla/hub.go` — broadcasts GPS pings to connected clients
 - **Database secret**: stored in AWS SSM Parameter Store (`/supply-chain/DATABASE_URL`) — read at cold start via `SSM_DATABASE_URL` env var; falls back to `DATABASE_URL` for local dev
 
 ### Infrastructure — `infra/cdk`

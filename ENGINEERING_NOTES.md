@@ -177,7 +177,7 @@ sequenceDiagram
 A broadcast here is a DynamoDB `Scan` + one HTTPS call per connected
 client — real cost, unlike the in-memory fan-out `full`/`lite` use. That
 tradeoff only makes sense because Lambda gives no alternative; see
-`internal/wshub/hub.go` and `internal/api/websocket_apigw.go`.
+`internal/wsapigw/hub.go` and `internal/api/websocket_apigw.go`.
 
 ### Why Neon instead of RDS?
 
@@ -223,16 +223,16 @@ the same binary runs on any tier:
 ```mermaid
 flowchart LR
     Boot["Server boot"] --> Check{"DYNAMODB_WS_TABLE AND<br/>APIGW_WS_ENDPOINT set?"}
-    Check -->|yes — ultra-lite| DDB["wshub.Hub<br/>API Gateway + DynamoDB"]
-    Check -->|no — lite / full| Gorilla["ws.Hub<br/>gorilla-websocket, in-process"]
+    Check -->|yes — ultra-lite| DDB["wsapigw.Hub<br/>API Gateway + DynamoDB"]
+    Check -->|no — lite / full| Gorilla["wsgorilla.Hub<br/>gorilla-websocket, in-process"]
 ```
 
 *(`services/supply-chain-api/cmd/server/main.go:89-112`)*
 
-- **`ws.Hub`** is an in-memory `map[*Client]bool` — broadcasting is free,
-  in-process socket writes. Needs a process that lives long enough to
+- **`wsgorilla.Hub`** is an in-memory `map[*Client]bool` — broadcasting is
+  free, in-process socket writes. Needs a process that lives long enough to
   hold the map.
-- **`wshub.Hub`** externalizes connection state to DynamoDB and pays for
+- **`wsapigw.Hub`** externalizes connection state to DynamoDB and pays for
   every broadcast (a scan + N `PostToConnection` calls) — the only option
   where no such process exists.
 - Running the DynamoDB design on `full`/`lite` would trade a free
@@ -356,8 +356,8 @@ needs a NAT.
 | File | What it does |
 |---|---|
 | `services/supply-chain-api/cmd/server/main.go:89-112` | Picks the WebSocket hub implementation |
-| `services/supply-chain-api/internal/wshub/hub.go` | Ultra-lite hub: API Gateway + DynamoDB |
-| `services/supply-chain-api/internal/ws/hub.go` | Full/lite hub: in-process gorilla-websocket |
+| `services/supply-chain-api/internal/wsapigw/hub.go` | Ultra-lite hub: API Gateway + DynamoDB |
+| `services/supply-chain-api/internal/wsgorilla/hub.go` | Full/lite hub: in-process gorilla-websocket |
 | `services/supply-chain-api/internal/auth/ws_ticket.go` | Single-use, hashed, 30s-TTL WS auth tickets |
 | `services/supply-chain-api/internal/auth/cognito.go` | Cognito JWT verification, JWKS caching |
 | `services/supply-chain-api/internal/risk/` | Concentration risk scoring |

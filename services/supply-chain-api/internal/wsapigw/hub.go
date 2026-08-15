@@ -1,4 +1,4 @@
-package wshub
+package wsapigw
 
 import (
 	"context"

@@ -50,7 +50,7 @@ infra/
 - **Router**: chi with Cognito JWT middleware (`internal/auth/cognito.go`)
 - **Database**: pgx/v5 + sqlc-generated queries; migrations in `migrations/`
 - **Risk engine**: `internal/risk/` (concentration, DC diversification) + `internal/disruption/` (simulation)
-- **WebSocket hub**: two implementations behind one interface, picked at startup — in-memory fan-out (`internal/ws/hub.go`) on App Runner/EKS, API Gateway + DynamoDB (`internal/wshub/hub.go`) on Lambda, where there's no persistent process to hold connections. See [`ENGINEERING_NOTES.md`](ENGINEERING_NOTES.md#why-two-websocket-hub-implementations) for why.
+- **WebSocket hub**: two implementations behind one interface, picked at startup — in-memory fan-out (`internal/wsgorilla/hub.go`) on App Runner/EKS, API Gateway + DynamoDB (`internal/wsapigw/hub.go`) on Lambda, where there's no persistent process to hold connections. See [`ENGINEERING_NOTES.md`](ENGINEERING_NOTES.md#why-two-websocket-hub-implementations) for why.
 - **Secrets**: database URL stored in AWS SSM Parameter Store; read at Lambda cold start via `SSM_DATABASE_URL`
 
 ### Infrastructure
@@ -169,8 +169,8 @@ make test                                          # everything at once
 | `internal/db/` | pgx connection pool + sqlc-generated queries |
 | `internal/risk/` | Concentration risk and DC diversification engine |
 | `internal/disruption/` | Disruption simulation and impact scoring |
-| `internal/ws/hub.go` | WebSocket hub — in-memory fan-out (App Runner / EKS) |
-| `internal/wshub/hub.go` | WebSocket hub — API Gateway + DynamoDB (Lambda) |
+| `internal/wsgorilla/hub.go` | WebSocket hub — in-memory fan-out (App Runner / EKS) |
+| `internal/wsapigw/hub.go` | WebSocket hub — API Gateway + DynamoDB (Lambda) |
 | `migrations/` | SQL migrations (golang-migrate) and seed data |
 
 See [`services/supply-chain-api/README.md`](services/supply-chain-api/README.md) for full API documentation.

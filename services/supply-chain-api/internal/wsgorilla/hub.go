@@ -1,4 +1,4 @@
-package ws
+package wsgorilla
 
 import (
 	"encoding/json"

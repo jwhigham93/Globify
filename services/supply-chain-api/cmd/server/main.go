@@ -21,8 +21,8 @@ import (
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/api"
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/auth"
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/db"
-	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/ws"
-	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wshub"
+	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wsapigw"
+	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wsgorilla"
 )
 
 func main() {
@@ -89,8 +89,8 @@ func main() {
 	// ── WebSocket hub ────────────────────────────────────────────────
 	// Production (Lambda): DynamoDB-backed hub via API Gateway WebSocket API.
 	// Local dev: gorilla hub with persistent in-process connections.
-	var gorillaHub *ws.Hub
-	var ddbHub *wshub.Hub
+	var gorillaHub *wsgorilla.Hub
+	var ddbHub *wsapigw.Hub
 
 	dynamoTable := os.Getenv("DYNAMODB_WS_TABLE")
 	wsEndpoint := os.Getenv("APIGW_WS_ENDPOINT")
@@ -98,10 +98,10 @@ func main() {
 		if awsCfgErr != nil {
 			log.Fatal().Err(awsCfgErr).Msg("failed to load AWS config for WebSocket hub")
 		}
-		ddbHub = wshub.New(awsCfg, dynamoTable, wsEndpoint)
+		ddbHub = wsapigw.New(awsCfg, dynamoTable, wsEndpoint)
 		log.Info().Str("table", dynamoTable).Msg("using DynamoDB WebSocket hub")
 	} else {
-		gorillaHub = ws.NewHub()
+		gorillaHub = wsgorilla.NewHub()
 		go gorillaHub.Run()
 		log.Info().Msg("using local gorilla WebSocket hub")
 
