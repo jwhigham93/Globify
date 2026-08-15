@@ -68,7 +68,7 @@ flowchart TB
 Everything is a long-lived process: EKS pods hold WebSocket connections in
 memory, RDS is always-on. Fully managed, highly available, expensive. WAF
 protects the CloudFront-served web app; the ALB itself has no WAF attached
-(see "Current State" below).
+(see "Known Limitations" below).
 
 ## `lite` — staging/demo shape
 
@@ -98,7 +98,7 @@ Still one persistent process (App Runner container), so it still holds
 WebSocket connections in memory just like `full`. The only swaps are managed
 → cheap building blocks: NAT Gateway → NAT instance, EKS → App Runner. WAF
 here only covers the CloudFront-served web app — App Runner has no WAF in
-front of it either (see "Current State" below).
+front of it either (see "Known Limitations" below).
 
 ## `ultra-lite` — what we actually run
 
@@ -179,52 +179,46 @@ client — real cost, unlike the in-memory fan-out `full`/`lite` use. That
 tradeoff only makes sense because Lambda gives no alternative; see
 `internal/wshub/hub.go` and `internal/api/websocket_apigw.go`.
 
-### Why Neon instead of RDS here
+### Why Neon instead of RDS?
 
-Lambda has no "once" — every concurrent request is its own instance with
-its own DB pool, so a burst of requests opens a burst of connections. A
-small Postgres box tops out fast (`FATAL: too many connections`). RDS also
-can't help without a VPC (NAT cost) and bills 24/7 whether or not anyone
-hits the API.
-
-Neon fixes all three:
+Lambda has no "once" — every concurrent request opens its own DB pool, and
+a burst of requests can burst past a small Postgres box's connection limit
+(`FATAL: too many connections`). RDS also needs a VPC (NAT cost) and bills
+24/7 whether or not anyone's hitting the API.
 
 - **Scales to zero** — an idle database costs ~nothing.
 - **Public internet + TLS** — no VPC, no NAT.
 - **Built-in connection pooler** — many Lambda instances multiplex onto a
   few real Postgres connections.
 
-### Why DynamoDB *too*, if Neon already exists?
+**Bottom line:** RDS assumes a handful of long-lived connections; Lambda's
+execution model can't offer that, so the database has to.
 
-They store different things. **Neon** is the system of record — suppliers,
-routes, risk data, and the one-time WebSocket auth tickets. **DynamoDB**
-holds nothing but ephemeral `connectionId → expiresAt` rows, alive for a
-couple of hours at most.
+### Why DynamoDB too, if Neon already exists?
 
-Routing that connection registry through Neon instead would work, but:
+They store different things. **Neon** is the system of record —
+suppliers, routes, risk data, one-time WS auth tickets. **DynamoDB** holds
+nothing but ephemeral `connectionId → expiresAt` rows, alive a couple
+hours at most. Routing that registry through Neon instead would work, but:
 
 - Every connect/disconnect would be a write against the relational DB —
-  churn that has nothing to do with business data.
+  churn unrelated to business data.
 - It would wake Neon's autosuspended compute on every socket open/close,
   undermining the "scales to zero" property that makes it cheap.
-- DynamoDB's on-demand pricing is cents/month at hobby-project connection
-  volumes (AWS's DynamoDB free tier technically only covers *provisioned*
-  capacity, which this table doesn't use — but the on-demand cost at this
-  scale is negligible regardless), and TTL auto-expires stale rows with
-  zero cleanup code.
-- It's the pattern AWS's own API Gateway WebSocket docs use — a Lambda
-  needs `execute-api:ManageConnections` IAM either way, so a purpose-built
-  KV store for connection state is the path of least resistance.
+- DynamoDB's on-demand cost is cents/month at this scale, and TTL
+  auto-expires stale rows with zero cleanup code.
+- It's the pattern AWS's own API Gateway WebSocket docs use — the Lambda
+  needs `execute-api:ManageConnections` IAM either way.
 
-Short version: Neon is the database; DynamoDB is a scratch pad for "who's
-currently connected," sized and priced for exactly that job.
+**Bottom line:** Neon is the database; DynamoDB is a scratch pad for
+"who's currently connected," sized and priced for exactly that job.
 
 ---
 
-## Why two WebSocket hub implementations
+## Why two WebSocket hub implementations?
 
-The API picks a hub at startup based on environment, not profile name —
-so the same binary runs on any tier:
+The API picks a hub at startup based on environment, not profile name, so
+the same binary runs on any tier:
 
 ```mermaid
 flowchart LR
@@ -235,28 +229,36 @@ flowchart LR
 
 *(`services/supply-chain-api/cmd/server/main.go:89-112`)*
 
-Not redundant — each is matched to what its compute substrate can offer.
-`ws.Hub` is an in-memory `map[*Client]bool`; broadcasting is free, in-process
-socket writes. That only works where a process lives long enough to hold
-the map. Where it doesn't (Lambda), connection state has to live somewhere
-else, and every broadcast pays for it — that's the DynamoDB hub above.
-Running the DynamoDB design on `full`/`lite` would trade a free operation
-for a billed one, for no benefit.
+- **`ws.Hub`** is an in-memory `map[*Client]bool` — broadcasting is free,
+  in-process socket writes. Needs a process that lives long enough to
+  hold the map.
+- **`wshub.Hub`** externalizes connection state to DynamoDB and pays for
+  every broadcast (a scan + N `PostToConnection` calls) — the only option
+  where no such process exists.
+- Running the DynamoDB design on `full`/`lite` would trade a free
+  operation for a billed one, and drag two extra managed services into
+  tiers whose whole premise is avoiding that.
 
-### Why EventBridge drives the GPS simulator
+**Bottom line:** each hub is matched to its compute substrate — persistent
+process → hold connections in memory; no process → externalize state and
+eat the per-message cost.
 
-Same "no persistent process" constraint, one more place it bites: on
-`full`/`lite`, a goroutine with a `time.Ticker` fires the GPS simulator
-every 2 minutes — trivial, because the process never exits. Lambda has no
-such process to hold a ticker in. **EventBridge** stands in for it: a
-scheduled rule invokes the Lambda every 2 minutes with a synthetic event
-(`source: supply-chain.simulator`), and the same handler that dispatches
-real API Gateway events recognizes it and calls the same `RunGPSSimulator`
-function — which moves each truck along its route and broadcasts the new
-position over whichever WS hub is active. One simulator function, two
-different clocks driving it: an in-process ticker where a process exists,
-an external scheduler where it doesn't. See
-`services/supply-chain-api/internal/api/gps_simulator.go` and
+### Why EventBridge drives the GPS simulator?
+
+Same constraint, one more place it bites: on `full`/`lite`, a goroutine
+with a `time.Ticker` fires the GPS simulator every 2 minutes — trivial,
+since the process never exits. Lambda has no such process to hold a
+ticker in.
+
+- **EventBridge** stands in for it — a scheduled rule invokes the Lambda
+  every 2 minutes with a synthetic event (`source: supply-chain.simulator`).
+- The same handler that dispatches real API Gateway events recognizes it
+  and calls `RunGPSSimulator`, which moves each truck and broadcasts the
+  new position over whichever hub is active.
+
+**Bottom line:** one simulator function, two different clocks driving it
+— an in-process ticker where a process exists, an external scheduler
+where it doesn't. See `internal/api/gps_simulator.go` and
 `cmd/server/main.go`'s `runLocalGPSTicker`.
 
 ## Auth handshake (both hubs)
@@ -292,30 +294,33 @@ edge/access logs — this ticket exchange replaced that). See
 minted and redeemed within a single request/response, so there's no
 independent churn to protect Neon from, unlike connection IDs.*
 
-## Why TanStack Query
+---
+
+## Why TanStack Query?
 
 The frontend used to carry its own copy of the domain — a hardcoded seed
 dataset plus TypeScript ports of the Go risk/disruption logic — as a
-`.catch(() => computeLocally(...))` fallback. It was cut for three reasons:
+`.catch(() => computeLocally(...))` fallback.
 
-- **It drifted.** The disruption endpoint's request shape didn't match
+- **It drifted** — the disruption endpoint's request shape didn't match
   between frontend and backend copies, silently masked by the fallback.
 - **It didn't scale** — a dataset baked into the client can't grow with
   real fleets or suppliers.
 - **It hid failures** — a failed request recomputing locally looked like
   success, with no error, no retry, no staleness signal.
 
-[TanStack Query](https://tanstack.com/query) (`apps/Globify/src/hooks/queries/`)
-replaced it as the sole data-fetching layer: declarative caching, request
-dedup, and real loading/error states, in place of hand-rolled debounce and
-fallback logic. There's no offline/mock mode anymore — the API must be
-running for the app to render anything.
+**Bottom line:** [TanStack Query](https://tanstack.com/query)
+(`apps/Globify/src/hooks/queries/`) replaced it as the sole data-fetching
+layer — declarative caching, request dedup, real loading/error states.
+There's no offline/mock mode anymore; the API must be running.
 
-## On not reinventing MapLibre
+## Why not MapLibre?
 
 The globe is hand-built — Three.js, a custom GLSL tile shader — to learn
 what's actually happening under something like Mapbox, not to ship the
-fastest product. Having built it: real respect for MapLibre GL, a
+fastest product.
+
+**Bottom line:** having built it, real respect for MapLibre GL, a
 C++-to-WASM renderer with years of tiling, labeling, and zoom work already
 solved. Right call for learning; wrong call for a product that needs true
 progressive zoom at scale — that's a MapLibre migration, not a bigger
@@ -323,33 +328,29 @@ shader.
 
 ## Cost as a first-class constraint
 
-All three profiles existed from day one — "what does this cost" was a
-design input, not an afterthought. The clearest example: outbound internet
-access from a private subnet needs a NAT. AWS's managed **NAT Gateway** is
-~$32/mo before any traffic; `full` uses it for the HA guarantee. `lite`
-swaps in a **NAT instance** — a single t4g.nano EC2 box — for a few
-dollars a month. `ultra-lite` skips the question: no VPC, so no NAT at all.
+All three profiles existed from day one — cost was a design input, not an
+afterthought. Clearest example: outbound internet from a private subnet
+needs a NAT.
 
-## Current State
+- **`full`** — managed **NAT Gateway** (~$32/mo before any traffic), for
+  the HA guarantee.
+- **`lite`** — a **NAT instance** (single t4g.nano EC2 box), a few
+  dollars a month.
+- **`ultra-lite`** — no VPC, so no NAT question at all.
 
-Recently merged: Google OAuth, the DynamoDB WebSocket pivot above, an
-EventBridge-driven GPS simulator (every 2 minutes, heading-biased
-movement), and a GitHub OIDC deploy role replacing long-lived IAM keys.
+---
 
-Known, deliberately deferred:
+## Known Limitations
 
 - **`WebOrigin` hardcoded** in `infra/cdk/main.go` instead of wired
-  dynamically. Fails safe (Cognito rejects unregistered redirect URIs) but
-  would break if that CloudFront distribution were ever recreated.
+  dynamically. Fails safe (Cognito rejects unregistered redirect URIs),
+  but would break if that CloudFront distribution were ever recreated.
 - **`GPS_SIM_TOKEN`** lives in the EventBridge rule's static event input —
   readable by anyone with `events:DescribeRule`. Blast radius is fake GPS
-  pings, not data access; real fix is Secrets Manager at invoke time.
-- **REGIONAL WAF ACL provisioned but unattached** — `SecurityStack`
-  creates a Web ACL meant for the ALB/API path on `full` and `lite`, but
-  `main.go` never associates it with anything; only the CloudFront-scoped
-  ACL is actually wired up. The API itself isn't WAF-protected on any
-  profile today.
-- CI/CD and broader security hardening are both in progress.
+  pings, not data access.
+- **REGIONAL WAF ACL provisioned but unattached** on `full`/`lite` —
+  `SecurityStack` creates it, but `main.go` never associates it with the
+  ALB or App Runner. Only the CloudFront ACL is actually wired up.
 
 ## Notable Files
 

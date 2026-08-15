@@ -25,7 +25,7 @@ Three profiles target different cost/capability tradeoffs:
 \* `SecurityStack` also provisions a REGIONAL Web ACL intended for the
 ALB/App Runner path, but it isn't associated with either in the current
 code — only the CloudFront ACL is actually attached. See
-`ENGINEERING_NOTES.md` → "Current State" for details.
+`ENGINEERING_NOTES.md` → "Known Limitations" for details.
 
 Default profile is **ultra-lite** (set in `cdk.json`). Override with:
 
