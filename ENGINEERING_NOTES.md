@@ -21,7 +21,7 @@ WebGL by building something worth looking at.
 
 | Layer | Tech |
 |---|---|
-| Frontend | Expo 54 (React Native + web), Three.js via `react-three-fiber`, custom GLSL tile shader |
+| Frontend | Expo 54 (React Native + web), Three.js via `react-three-fiber` |
 | Backend | Go 1.26, chi, pgx, sqlc |
 | Database | Postgres (Neon, serverless) |
 | Infra | AWS CDK v2 (Go), 3 deployment profiles behind one context flag |
@@ -177,7 +177,7 @@ sequenceDiagram
 A broadcast here is a DynamoDB `Scan` + one HTTPS call per connected
 client — real cost, unlike the in-memory fan-out `full`/`lite` use. That
 tradeoff only makes sense because Lambda gives no alternative; see
-`internal/wshub/hub.go` and `internal/api/websocket_apigw.go`.
+`internal/wsapigw/hub.go` and `internal/api/websocket_apigw.go`.
 
 ### Why Neon instead of RDS?
 
@@ -223,16 +223,16 @@ the same binary runs on any tier:
 ```mermaid
 flowchart LR
     Boot["Server boot"] --> Check{"DYNAMODB_WS_TABLE AND<br/>APIGW_WS_ENDPOINT set?"}
-    Check -->|yes — ultra-lite| DDB["wshub.Hub<br/>API Gateway + DynamoDB"]
-    Check -->|no — lite / full| Gorilla["ws.Hub<br/>gorilla-websocket, in-process"]
+    Check -->|yes — ultra-lite| DDB["wsapigw.Hub<br/>API Gateway + DynamoDB"]
+    Check -->|no — lite / full| Gorilla["wsgorilla.Hub<br/>gorilla-websocket, in-process"]
 ```
 
 *(`services/supply-chain-api/cmd/server/main.go:89-112`)*
 
-- **`ws.Hub`** is an in-memory `map[*Client]bool` — broadcasting is free,
-  in-process socket writes. Needs a process that lives long enough to
+- **`wsgorilla.Hub`** is an in-memory `map[*Client]bool` — broadcasting is
+  free, in-process socket writes. Needs a process that lives long enough to
   hold the map.
-- **`wshub.Hub`** externalizes connection state to DynamoDB and pays for
+- **`wsapigw.Hub`** externalizes connection state to DynamoDB and pays for
   every broadcast (a scan + N `PostToConnection` calls) — the only option
   where no such process exists.
 - Running the DynamoDB design on `full`/`lite` would trade a free
@@ -316,9 +316,8 @@ There's no offline/mock mode anymore; the API must be running.
 
 ## Why not MapLibre?
 
-The globe is hand-built — Three.js, a custom GLSL tile shader — to learn
-what's actually happening under something like Mapbox, not to ship the
-fastest product.
+The globe is hand-built on raw Three.js to learn what's actually happening
+under something like Mapbox, not to ship the fastest product.
 
 **Bottom line:** having built it, real respect for MapLibre GL, a
 C++-to-WASM renderer with years of tiling, labeling, and zoom work already
@@ -356,10 +355,9 @@ needs a NAT.
 
 | File | What it does |
 |---|---|
-| `apps/Globify/src/components/Globe/tileShader.ts` | Custom GLSL shader, up to 8 composited tile overlays |
 | `services/supply-chain-api/cmd/server/main.go:89-112` | Picks the WebSocket hub implementation |
-| `services/supply-chain-api/internal/wshub/hub.go` | Ultra-lite hub: API Gateway + DynamoDB |
-| `services/supply-chain-api/internal/ws/hub.go` | Full/lite hub: in-process gorilla-websocket |
+| `services/supply-chain-api/internal/wsapigw/hub.go` | Ultra-lite hub: API Gateway + DynamoDB |
+| `services/supply-chain-api/internal/wsgorilla/hub.go` | Full/lite hub: in-process gorilla-websocket |
 | `services/supply-chain-api/internal/auth/ws_ticket.go` | Single-use, hashed, 30s-TTL WS auth tickets |
 | `services/supply-chain-api/internal/auth/cognito.go` | Cognito JWT verification, JWKS caching |
 | `services/supply-chain-api/internal/risk/` | Concentration risk scoring |

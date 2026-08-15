@@ -14,8 +14,8 @@ import (
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/risk"
 )
 
-// WSBroadcaster is implemented by both the local gorilla Hub (dev) and the
-// DynamoDB-backed wshub.Hub (Lambda/API Gateway production).
+// WSBroadcaster is implemented by both the local wsgorilla.Hub (dev) and the
+// DynamoDB-backed wsapigw.Hub (Lambda/API Gateway production).
 type WSBroadcaster interface {
 	Broadcast(msgType string, data interface{})
 }

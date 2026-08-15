@@ -8,7 +8,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/auth"
-	wsHub "github.com/jwhig/jw-dev/services/supply-chain-api/internal/ws"
+	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wsgorilla"
 )
 
 // newUpgrader builds a WebSocket upgrader whose CheckOrigin allows only the
@@ -38,7 +38,7 @@ func newUpgrader(authDisabled bool) websocket.Upgrader {
 // HTTP call and connects with "?ticket=". The ticket is redeemed (and deleted)
 // here, keeping the JWT out of the URL and any access logs. When authEnabled is
 // false (local dev) the ticket check is skipped.
-func HandleWebSocketUpgrade(pool *pgxpool.Pool, hub *wsHub.Hub, authEnabled bool) http.HandlerFunc {
+func HandleWebSocketUpgrade(pool *pgxpool.Pool, hub *wsgorilla.Hub, authEnabled bool) http.HandlerFunc {
 	upgrader := newUpgrader(!authEnabled)
 	return func(w http.ResponseWriter, r *http.Request) {
 		if authEnabled {

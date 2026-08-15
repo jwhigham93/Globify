@@ -65,7 +65,7 @@ binary runs on every deploy profile.
 | `COGNITO_CLIENT_ID` | No | — | AWS Cognito App Client ID |
 | `COGNITO_REGION` | No | — | AWS region of the Cognito User Pool |
 | `AUTH_DISABLED` | No | — | Set to `true` to bypass auth entirely (local dev only) — the only way to run without Cognito configured |
-| `DYNAMODB_WS_TABLE` | No | — | DynamoDB table name for WebSocket connection IDs. Selects the Lambda WS hub (`internal/wshub`) when set; unset selects the in-memory hub (`internal/ws`). |
+| `DYNAMODB_WS_TABLE` | No | — | DynamoDB table name for WebSocket connection IDs. Selects the Lambda WS hub (`internal/wsapigw`) when set; unset selects the in-memory hub (`internal/wsgorilla`). |
 | `APIGW_WS_ENDPOINT` | No | — | API Gateway WebSocket callback URL, used to push messages back to clients. Required alongside `DYNAMODB_WS_TABLE`. |
 | `GPS_SIM_TOKEN` | No | — | Shared secret required in the EventBridge GPS-simulator payload (Lambda only) |
 | `LOG_FORMAT` | No | `console` | Set to `json` for structured JSON logs |
