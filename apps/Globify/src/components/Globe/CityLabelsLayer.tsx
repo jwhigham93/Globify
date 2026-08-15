@@ -13,11 +13,13 @@
  * There is no off-the-shelf collision/decluttering system for text on a
  * Three.js globe (that's a MapLibre/Mapbox symbol-layer feature, and this
  * app uses neither). Each frame (throttled), every label's current world
- * position is projected to screen space and handed to
- * services/labelCollision.ts, which greedily keeps the highest-priority
- * non-overlapping labels visible and hides the rest. Depth testing is left
- * on (the default), so the opaque globe naturally occludes labels on the
- * far side — no separate horizon culling is needed.
+ * position is checked against the globe first (services/labelCollision.ts's
+ * `isBackFacing` — depth testing alone hides an occluded label visually,
+ * but doesn't stop its projected position from still competing in the
+ * collision pass, where it could wrongly bump a real, visible label) and
+ * then, if front-facing, projected to screen space and handed to
+ * `selectVisibleLabels`, which greedily keeps the highest-priority
+ * non-overlapping labels visible and hides the rest.
  */
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
@@ -30,7 +32,7 @@ import { useFrame } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei/native';
 import * as THREE from 'three';
 import { MAJOR_CITY_LABELS } from '../../data/majorCityLabels';
-import { selectVisibleLabels, type ProjectedLabel } from '../../services/labelCollision';
+import { selectVisibleLabels, isBackFacing, type ProjectedLabel } from '../../services/labelCollision';
 import { color as themeColor } from '../ui/theme';
 import {
   CITY_LABEL_ALTITUDE,
@@ -74,6 +76,7 @@ export const CityLabelsLayer: React.FC<CityLabelsLayerProps> = ({ globeRef, isRe
   const lastCheckRef = useRef(0);
   const worldPosRef = useRef(new THREE.Vector3());
   const cornerRef = useRef(new THREE.Vector3());
+  const globeCenterRef = useRef(new THREE.Vector3());
 
   // Parent the group to the globe once it exists. Required, not cosmetic:
   // globe.getCoords() returns globe-local coordinates (see TruckLayer.tsx).
@@ -121,18 +124,31 @@ export const CityLabelsLayer: React.FC<CityLabelsLayerProps> = ({ globeRef, isRe
     const halfW = size.width / 2;
     const halfH = size.height / 2;
     const projected: ProjectedLabel[] = [];
+    const globe = globeRef.current;
+    if (globe) globe.getWorldPosition(globeCenterRef.current);
 
     for (const city of cities) {
       const obj = textRefs.current.get(city.id);
       if (!obj) continue;
 
       obj.getWorldPosition(worldPosRef.current);
+
+      // Cull labels the opaque globe is occluding *before* they can enter
+      // the declutter pass — not just for their own rendering. The globe's
+      // depth test already hides these labels visually, but that's a
+      // rendering-time effect the collision math otherwise knows nothing
+      // about: an occluded far-side label's projected position can still
+      // collide with a real, visible near-side one and wrongly bump it, or
+      // simply waste a competing slot for a label nobody can see anyway.
+      if (globe && isBackFacing(worldPosRef.current, globeCenterRef.current, camera.position)) {
+        obj.visible = false;
+        continue;
+      }
+
       worldPosRef.current.project(camera);
 
-      // Standard "behind the camera" check post-projection — keep it out of
-      // the declutter pass entirely so it can't shadow a real label. The
-      // globe's own depth test is what actually hides far-side labels
-      // visually; this only protects the screen-space math.
+      // Standard "behind the camera" check post-projection — a separate,
+      // camera-relative concern from the globe-occlusion check above.
       if (worldPosRef.current.z > 1) {
         obj.visible = false;
         continue;

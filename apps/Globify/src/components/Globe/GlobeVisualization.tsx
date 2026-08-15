@@ -82,7 +82,7 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
 
   // ── Truck GPS layer ──────────────────────────────────────────────
   const [showTrucks, setShowTrucks] = useState(false);
-  const [showCityLabels, setShowCityLabels] = useState(true);
+  const [showCityLabels, setShowCityLabels] = useState(false);
   const [selectedTruckId, setSelectedTruckId] = useState<string | null>(null);
   const { positions: vehiclePositions } = useVehiclePositions(
     config.resolvedWsUrl,

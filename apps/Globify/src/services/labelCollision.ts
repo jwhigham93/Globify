@@ -14,6 +14,32 @@
  * the pass without any explicit zoom-tier logic.
  */
 
+export interface Point3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * Whether a point on (or near) a sphere is on its far side from the
+ * camera — i.e. the opaque sphere would occlude it. True when the point's
+ * outward normal (sphere center → point) faces away from the camera.
+ *
+ * Plain vector math, no Three.js dependency: takes world-space points
+ * directly so it stays unit-testable without mocking a camera/scene.
+ * Only the sign of the dot product matters, so neither vector needs
+ * normalizing first.
+ */
+export function isBackFacing(point: Point3, sphereCenter: Point3, cameraPos: Point3): boolean {
+  const nx = point.x - sphereCenter.x;
+  const ny = point.y - sphereCenter.y;
+  const nz = point.z - sphereCenter.z;
+  const tx = cameraPos.x - point.x;
+  const ty = cameraPos.y - point.y;
+  const tz = cameraPos.z - point.z;
+  return nx * tx + ny * ty + nz * tz <= 0;
+}
+
 export interface ProjectedLabel {
   /** Unique identifier */
   id: string;

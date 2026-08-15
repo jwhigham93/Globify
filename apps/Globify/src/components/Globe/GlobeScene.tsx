@@ -197,7 +197,7 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   onTilesLoading,
   vehiclePositions,
   showTrucks = false,
-  showCityLabels = true,
+  showCityLabels = false,
   onTruckClick,
   routePathData = [],
 }) => {

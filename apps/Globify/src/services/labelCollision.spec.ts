@@ -2,7 +2,7 @@
  * Tests for screen-space label collision (declutter) service
  */
 
-import { selectVisibleLabels, type ProjectedLabel } from './labelCollision';
+import { selectVisibleLabels, isBackFacing, type ProjectedLabel } from './labelCollision';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -61,7 +61,7 @@ describe('selectVisibleLabels', () => {
     // survive even though it would have collided with the rejected B.
     const a = makeLabel('a', 0, 0, 1, 10, 10);
     const b = makeLabel('b', 15, 0, 2, 10, 10); // overlaps a
-    const c = makeLabel('c', 40, 0, 3, 10, 10); // overlaps b, not a
+    const c = makeLabel('c', 30, 0, 3, 10, 10); // overlaps b, not a
     const result = selectVisibleLabels([a, b, c]);
     expect(result).toEqual(new Set(['a', 'c']));
   });
@@ -72,5 +72,27 @@ describe('selectVisibleLabels', () => {
       makeLabel('second', 5, 5, 1),
     ]);
     expect(result).toEqual(new Set(['first']));
+  });
+});
+
+describe('isBackFacing', () => {
+  const CENTER = { x: 0, y: 0, z: 0 };
+  const CAMERA = { x: 0, y: 0, z: 300 };
+
+  it('is false for a point on the near side, facing the camera', () => {
+    expect(isBackFacing({ x: 0, y: 0, z: 100 }, CENTER, CAMERA)).toBe(false);
+  });
+
+  it('is true for a point on the far side, hidden behind the sphere', () => {
+    expect(isBackFacing({ x: 0, y: 0, z: -100 }, CENTER, CAMERA)).toBe(true);
+  });
+
+  it('works for a camera and point off the coordinate axes', () => {
+    const camera = { x: 200, y: 0, z: 200 };
+    // Point whose outward normal (from CENTER) points the same general
+    // direction as the camera — near side, should face the camera.
+    expect(isBackFacing({ x: 70, y: 0, z: 70 }, CENTER, camera)).toBe(false);
+    // Directly opposite that — far side.
+    expect(isBackFacing({ x: -70, y: 0, z: -70 }, CENTER, camera)).toBe(true);
   });
 });
