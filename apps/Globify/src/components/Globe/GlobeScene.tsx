@@ -321,15 +321,12 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
     // Recompute collision altitudes for location markers
     const altitudeMap = buildAltitudeMap(dataPoints);
 
-    // Tag location objects so the callbacks can distinguish them from trucks
-    const locationObjects = dataPoints.map((dp) => ({ ...dp, __kind: 'location' as const }));
-
     globeRef.current
       .objectAltitude((d: object) => {
         const point = d as DataPoint;
         return altitudeMap.get(point.id || '') || 0;
       })
-      .objectsData(locationObjects);
+      .objectsData(dataPoints);
   }, [dataPoints, isInitialized]);
 
   // Update arcs data when it changes (separate from initialization)

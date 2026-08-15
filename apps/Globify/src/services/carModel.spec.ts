@@ -14,6 +14,7 @@ import {
   smoothScalar,
   shortestLngDelta,
   smoothLongitude,
+  snapToTarget,
 } from './carModel';
 import {
   TRUCK_COLOR_LIVE,
@@ -142,7 +143,8 @@ describe('createCarMesh', () => {
     const b = createCarMesh(TRUCK_COLOR_LIVE);
 
     // Simulate three-globe's removal path, which walks children disposing
-    // geometry and material.
+    // their material. Geometry is shared (see disposeCarResources) and must
+    // survive — b, below, still needs it.
     const disposed: string[] = [];
     a.traverse((child) => {
       const mesh = child as THREE.Mesh;
@@ -309,5 +311,42 @@ describe('smoothLongitude', () => {
 
   it('stays put when already on target', () => {
     expect(smoothLongitude(42.5, 42.5, 3, 1 / 60)).toBeCloseTo(42.5, 10);
+  });
+});
+
+describe('snapToTarget', () => {
+  it('moves current position and heading straight to their targets', () => {
+    const state = {
+      curLat: 10,
+      curLng: -50,
+      curHeading: 0.1,
+      tgtLat: 12.5,
+      tgtLng: -47.2,
+      tgtHeading: 1.9,
+    };
+    snapToTarget(state);
+    expect(state.curLat).toBe(state.tgtLat);
+    expect(state.curLng).toBe(state.tgtLng);
+    expect(state.curHeading).toBe(state.tgtHeading);
+  });
+
+  it('is a no-op when already on target', () => {
+    const state = {
+      curLat: 5,
+      curLng: 5,
+      curHeading: 5,
+      tgtLat: 5,
+      tgtLng: 5,
+      tgtHeading: 5,
+    };
+    snapToTarget(state);
+    expect(state).toEqual({
+      curLat: 5,
+      curLng: 5,
+      curHeading: 5,
+      tgtLat: 5,
+      tgtLng: 5,
+      tgtHeading: 5,
+    });
   });
 });

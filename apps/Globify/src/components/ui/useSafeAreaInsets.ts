@@ -2,7 +2,7 @@
  * Safe-area insets for the web build.
  *
  * On iOS Safari/Chrome the browser toolbars and the notch overlap a page laid
- * out at `100vh`. `web/index.html` declares `viewport-fit=cover` and mirrors
+ * out at `100vh`. `public/index.html` declares `viewport-fit=cover` and mirrors
  * `env(safe-area-inset-*)` into CSS custom properties; this hook reads those
  * back so React Native styles can offset overlays by them.
  *

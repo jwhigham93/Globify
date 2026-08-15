@@ -89,8 +89,8 @@ const AppContent = () => {
   );
 
   // On web, use a div container for proper iframe rendering. Sizing lives in
-  // the .globify-root class in web/index.html — an inline style cannot express
-  // the `height: 100%; height: 100dvh` fallback pair that iOS needs.
+  // the .globify-root class in public/index.html — an inline style cannot
+  // express the `height: 100%; height: 100dvh` fallback pair that iOS needs.
   if (Platform.OS === 'web') {
     return <div className="globify-root">{globeContent}</div>;
   }

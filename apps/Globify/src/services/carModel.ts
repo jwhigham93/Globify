@@ -331,3 +331,27 @@ export function smoothLongitude(
 ): number {
   return current + shortestLngDelta(current, target) * (1 - Math.exp(-k * dt));
 }
+
+/** The subset of TruckLayer's per-vehicle state this needs. */
+export interface TruckKinematics {
+  curLat: number;
+  curLng: number;
+  curHeading: number;
+  tgtLat: number;
+  tgtLng: number;
+  tgtHeading: number;
+}
+
+/**
+ * Snaps rendered position and heading straight to their latest targets,
+ * skipping the easing curve. Targets keep advancing with every GPS ping even
+ * while a truck layer is hidden, but the rendered state is frozen while
+ * hidden — so resuming the normal ease on reveal would visibly slide every
+ * car across the globe from its stale position. Call this once on the
+ * hidden-to-visible transition instead.
+ */
+export function snapToTarget(state: TruckKinematics): void {
+  state.curLat = state.tgtLat;
+  state.curLng = state.tgtLng;
+  state.curHeading = state.tgtHeading;
+}

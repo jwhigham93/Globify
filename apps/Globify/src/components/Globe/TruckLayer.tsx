@@ -30,6 +30,7 @@ import {
   smoothAngle,
   smoothScalar,
   smoothLongitude,
+  snapToTarget,
   type CarMesh,
 } from '../../services/carModel';
 import { getTruckColor, computePulseScale, type GpsStatus } from '../../services/truckVisuals';
@@ -82,6 +83,9 @@ export const TruckLayer: React.FC<TruckLayerProps> = ({
   const statesRef = useRef<Map<string, TruckState>>(new Map());
   // Reused every frame so the update loop allocates nothing.
   const eulerRef = useRef(new THREE.Euler());
+  // Tracks the previous frame's visibility so a reveal can snap instead of
+  // easing from a stale position (targets keep advancing while hidden).
+  const wasVisibleRef = useRef(false);
 
   // Attach a group to the globe. Parenting to the globe (not the scene) is
   // required: getCoords returns globe-local coordinates.
@@ -171,7 +175,16 @@ export const TruckLayer: React.FC<TruckLayerProps> = ({
     if (!group || !globe) return;
 
     group.visible = showTrucks;
-    if (!showTrucks) return;
+    if (!showTrucks) {
+      wasVisibleRef.current = false;
+      return;
+    }
+    if (!wasVisibleRef.current) {
+      // Targets advanced while hidden; place cars at the latest ping instead
+      // of easing them across the globe from a stale position.
+      for (const state of statesRef.current.values()) snapToTarget(state);
+      wasVisibleRef.current = true;
+    }
 
     const dist = camera.position.length();
     const zoomT = Math.max(0, Math.min(1,

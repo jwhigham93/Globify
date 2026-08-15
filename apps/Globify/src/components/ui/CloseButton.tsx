@@ -22,6 +22,7 @@ export const CloseButton: React.FC<CloseButtonProps> = ({
   <TouchableOpacity
     style={s.button}
     onPress={onPress}
+    hitSlop={9}
     activeOpacity={0.7}
     accessibilityRole="button"
     accessibilityLabel={accessibilityLabel}
