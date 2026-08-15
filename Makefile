@@ -75,6 +75,7 @@ api:
 ## Stop PostgreSQL and any running API
 api-stop:
 	cd $(API_DIR) && $(MAKE) db-down
+	-@fuser -k 8080/tcp 2>/dev/null || true
 	-@pkill -f "go run ./cmd/server" 2>/dev/null || true
 	-@pkill -f "bin/server" 2>/dev/null || true
 
@@ -82,6 +83,7 @@ api-stop:
 
 ## Stop all services
 stop:
+	-@fuser -k 8080/tcp 2>/dev/null || true
 	-@pkill -f "go run ./cmd/server" 2>/dev/null || true
 	-@pkill -f "bin/server" 2>/dev/null || true
 	-cd $(API_DIR) && $(MAKE) db-down 2>/dev/null || true

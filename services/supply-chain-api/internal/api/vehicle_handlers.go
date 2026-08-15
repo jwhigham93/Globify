@@ -49,7 +49,7 @@ func (h *Handlers) HandleListVehicles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if vp.RecordedAt != nil {
-			vp.GpsStatus = models.ComputeGpsStatus(*vp.RecordedAt)
+			vp.GpsStatus = models.ResolveGpsStatus(vp.ID, *vp.RecordedAt)
 		} else {
 			vp.GpsStatus = models.GpsStatusLost
 		}
@@ -114,7 +114,7 @@ func (h *Handlers) HandleGetVehicle(w http.ResponseWriter, r *http.Request) {
 
 	gpsStatus := models.GpsStatusLost
 	if len(pings) > 0 {
-		gpsStatus = models.ComputeGpsStatus(pings[0].RecordedAt)
+		gpsStatus = models.ResolveGpsStatus(id, pings[0].RecordedAt)
 	}
 
 	writeJSON(w, http.StatusOK, models.VehicleDetail{
@@ -185,7 +185,7 @@ func (h *Handlers) HandleBulkPositions(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		bp.GpsStatus = models.ComputeGpsStatus(bp.RecordedAt)
+		bp.GpsStatus = models.ResolveGpsStatus(bp.VehicleID, bp.RecordedAt)
 		positions = append(positions, bp)
 	}
 
@@ -243,7 +243,7 @@ func (h *Handlers) HandleIngestGpsPing(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		prevStatus = models.GpsStatusLost // no previous ping
 	} else {
-		prevStatus = models.ComputeGpsStatus(prevRecordedAt)
+		prevStatus = models.ResolveGpsStatus(pathID, prevRecordedAt)
 	}
 
 	_, err = h.pool.Exec(r.Context(),
@@ -259,7 +259,7 @@ func (h *Handlers) HandleIngestGpsPing(w http.ResponseWriter, r *http.Request) {
 
 	// Broadcast position update via WebSocket
 	if h.hub != nil {
-		newStatus := models.GpsStatusLive
+		newStatus := models.ResolveGpsStatus(pathID, recordedAt)
 		h.hub.Broadcast("position_update", models.BulkPosition{
 			VehicleID:  pathID,
 			Lat:        req.Lat,

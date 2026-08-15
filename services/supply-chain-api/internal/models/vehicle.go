@@ -47,6 +47,29 @@ func ComputeGpsStatus(lastPingAt time.Time) GpsStatus {
 	return GpsStatusLost
 }
 
+// pinnedVehicleStatuses hard-codes GpsStatus for a small set of always-on
+// demo vehicles, bypassing ping-age computation entirely. Ping age only
+// ever grows over real time, so no amount of clever timestamp insertion can
+// hold a vehicle's *computed* status at a fixed point forever — periodically
+// refreshing recorded_at to "now" reads live for a few minutes, and never
+// refreshing it lets the age eventually cross from stale into lost. The
+// only way to guarantee a vehicle always reads as (say) stale — never live,
+// never lost — is to override the status directly for that ID.
+var pinnedVehicleStatuses = map[string]GpsStatus{
+	"a1000000-0000-0000-0000-000000000009": GpsStatusStale, // SC-T009 (Chicago)
+	"a1000000-0000-0000-0000-000000000014": GpsStatusLost,  // SC-T014 (DC Metro)
+}
+
+// ResolveGpsStatus returns the pinned status for vehicleID if it's one of
+// the fixed demo vehicles in pinnedVehicleStatuses, otherwise computes
+// status normally from ping age via ComputeGpsStatus.
+func ResolveGpsStatus(vehicleID string, lastPingAt time.Time) GpsStatus {
+	if status, ok := pinnedVehicleStatuses[vehicleID]; ok {
+		return status
+	}
+	return ComputeGpsStatus(lastPingAt)
+}
+
 // Vehicle represents a delivery vehicle.
 type Vehicle struct {
 	ID        string        `json:"id"`
