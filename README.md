@@ -4,7 +4,7 @@
 
 A full-stack supply chain visibility platform built around an interactive 3D globe. Renders real-time truck positions, supplier routes, disruption risk, and concentration risk for a representative QSR supply chain dataset.
 
-**Tech highlights:** React Native · Expo 54 · Three.js (react-three-fiber) · custom GLSL tile shader · Go 1.26 · chi · PostgreSQL 17 · sqlc · WebSocket GPS streaming · AWS CDK v2 · Cognito auth · Lambda / App Runner / EKS deployment profiles
+**Tech highlights:** React Native · Expo 54 · Three.js (react-three-fiber) · Go 1.26 · chi · PostgreSQL 17 · sqlc · WebSocket GPS streaming · AWS CDK v2 · Cognito auth · Lambda / App Runner / EKS deployment profiles
 
 **Docs:** [`ENGINEERING_NOTES.md`](ENGINEERING_NOTES.md) — the story behind the
 architecture, with diagrams for all three deploy profiles · [`apps/Globify/README.md`](apps/Globify/README.md) —
@@ -17,7 +17,7 @@ frontend · [`services/supply-chain-api/README.md`](services/supply-chain-api/RE
 
 | Area | Details |
 |---|---|
-| **3D WebGL rendering** | Custom tile shader loads NASA satellite imagery at progressive LOD; supplier arcs, truck markers, and risk heatmaps rendered as Three.js layers |
+| **3D WebGL rendering** | NASA night-lights Earth texture; supplier arcs, truck markers, and risk heatmaps rendered as Three.js layers |
 | **Real-time data** | Go WebSocket hub broadcasts GPS pings to all connected clients; React hook streams positions onto the globe without polling |
 | **Risk scoring** | Supplier concentration risk, DC diversification index, and disruption simulation computed server-side with a domain model in Go |
 | **Full-stack typing** | sqlc generates type-safe Go from raw SQL; API responses typed end-to-end into TypeScript |
@@ -42,7 +42,6 @@ infra/
 ### Frontend
 
 - **Globe**: `GlobeScene.tsx` → `GlobeVisualization.tsx` orchestrates Three.js layers via `react-three-fiber`
-- **Tile rendering**: custom GLSL shader in `tileShader.ts` samples NASA imagery tiles based on camera zoom
 - **Services** (`src/services/`): pure TypeScript, no React — each has a `.spec.ts` alongside it
 - **Real-time**: `gpsStreamService.ts` → `useVehiclePositions.ts` → truck markers on globe
 
@@ -155,7 +154,6 @@ make test                                          # everything at once
 | `app/App.tsx` | Root component — auth gate + data loading |
 | `app/AuthProvider.tsx` | Cognito context; bypassed when `isAuthEnabled` is false |
 | `components/Globe/GlobeVisualization.tsx` | Three.js globe — orchestrates all layers |
-| `components/Globe/tileShader.ts` | Custom GLSL for NASA satellite tile sampling |
 | `services/apiClient.ts` | Typed HTTP client with JWT injection and retry |
 | `services/gpsStreamService.ts` | WebSocket client for real-time truck positions |
 | `services/concentrationRisk.ts` | Supplier concentration risk scoring |

@@ -84,7 +84,7 @@ export const CAMERA_FAR = 50000;
 
 
 // Zoom limits (camera distance from origin)
-export const ZOOM_MIN_DISTANCE = 102;  // Closest zoom — extended for tile detail
+export const ZOOM_MIN_DISTANCE = 102;  // Closest zoom
 export const ZOOM_MAX_DISTANCE = 200;  // Farthest zoom — full globe with generous padding
 export const CONTROLS_HINT_HIDE_DISTANCE = 175; // Hide control hints when zoomed in past this
 
@@ -97,13 +97,6 @@ export const ZOOM_SLOWDOWN_DIST = 160;        // distance below which zoom start
 export const ROTATE_SPEED_FAR = 1.0;          // normal drag speed when far
 export const ROTATE_SPEED_NEAR = 0.2;         // slow drag speed near surface
 
-
-// Progressive tile loading thresholds (camera distance)
-export const TILE_ZOOM_THRESHOLD_Z1 = 140; // Below this distance, load z1 tiles
-export const TILE_ZOOM_THRESHOLD_Z2 = 120; // Below this distance, load z2 tiles
-export const TILE_CACHE_MAX_SIZE = 32;     // Max textures in LRU cache
-export const TILE_FADE_DURATION = 300;     // Tile fade-in animation (ms)
-export const TILE_CHECK_INTERVAL = 200;    // Throttle tile checks in render loop (ms)
 
 // Star background settings
 export const STAR_SPHERE_RADIUS = 20000;

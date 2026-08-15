@@ -13,9 +13,6 @@ export const config = {
   /** WebSocket URL for real-time GPS streaming. Derived from apiBaseUrl if not set. Empty string explicitly disables streaming. */
   wsUrl: process.env.EXPO_PUBLIC_WS_URL ?? (extra.WS_URL as string) ?? '',
 
-  /** CDN base URL for progressive NASA tile imagery. Falls back to localhost:3001 in dev mode. */
-  tileCdnUrl: (extra.TILE_CDN_URL as string) || '',
-
   /** AWS Cognito User Pool ID */
   cognitoUserPoolId: process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID || (extra.COGNITO_USER_POOL_ID as string) || '',
 
@@ -44,10 +41,5 @@ export const config = {
     return this.apiBaseUrl
       .replace(/^https:/, 'wss:')
       .replace(/^http:/, 'ws:') + '/api/v1/vehicles/stream';
-  },
-
-  /** Resolved tile URL — disabled pending visual quality improvements */
-  get resolvedTileCdnUrl(): string {
-    return '';
   },
 } as const;

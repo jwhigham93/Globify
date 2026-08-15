@@ -25,9 +25,6 @@ import {
   MARKER_CLUSTER_DISC_HEIGHT,
   MARKER_CLUSTER_COLOR,
   MARKER_CLUSTER_GLOW_INTENSITY,
-  TILE_FADE_DURATION,
-  TILE_CHECK_INTERVAL,
-  TILE_ZOOM_THRESHOLD_Z1,
   TRUCK_MARKER_ALTITUDE,
   MARKER_SCALE_FAR_DIST,
   MARKER_SCALE_NEAR_DIST,
@@ -39,15 +36,6 @@ import {
   ROUTE_PATH_DASH_GAP,
   ROUTE_PATH_ANIMATE_TIME,
 } from './constants';
-import {
-  createTileCompositeMaterial,
-  updateTileOverlay,
-  animateTileFadeIn,
-  findAvailableSlot,
-  type TileShaderMaterial,
-} from './tileShader';
-import { TileManager } from '../../services/tileManager';
-import { tileToLatLngBounds } from '../../services/tileCoordinates';
 import type { VehiclePosition } from '../../services/useVehiclePositions';
 import { buildAltitudeMap } from '../../services/collisionDetection';
 import { resolveClickTarget } from '../../services/resolveGlobeClick';
@@ -70,10 +58,6 @@ export interface GlobeSceneProps {
   zoomTarget?: number | null;
   /** Called when the camera reaches the zoom target */
   onZoomTargetReached?: () => void;
-  /** CDN base URL for progressive tile loading (empty = disabled) */
-  tileCdnUrl?: string;
-  /** Callback when tile loading state changes */
-  onTilesLoading?: (isLoading: boolean) => void;
   /** Vehicle positions for truck layer (from WebSocket/REST) */
   vehiclePositions?: Map<string, VehiclePosition>;
   /** Whether the truck layer is visible */
@@ -190,8 +174,6 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   onZoomChange,
   zoomTarget,
   onZoomTargetReached,
-  tileCdnUrl = '',
-  onTilesLoading,
   vehiclePositions,
   showTrucks = false,
   onTruckClick,
@@ -212,12 +194,6 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   const arcsDataRef = useRef(arcsData);
   arcsDataRef.current = arcsData;
   const lastArcRefreshDist = useRef(0);
-
-
-  // Tile system refs
-  const tileManagerRef = useRef<TileManager | null>(null);
-  const tileMaterialRef = useRef<TileShaderMaterial | null>(null);
-  const lastTileCheckRef = useRef<number>(0);
 
   // Initialize globe once on mount - separate from data updates
   useEffect(() => {
@@ -411,87 +387,6 @@ export const GlobeScene: React.FC<GlobeSceneProps> = ({
   }, [onPointClick, onBackgroundClick, onTruckClick, isInitialized, camera, gl, showTrucks]);
 
   // No auto-rotation - user controls the globe manually
-
-  // ── Tile system initialization ──────────────────────────────────
-  useEffect(() => {
-    if (!tileCdnUrl || !isGlobeReady || !globeRef.current) return;
-
-    let cancelled = false;
-
-    // Probe first to avoid console noise when tile server isn't running
-    TileManager.probe(tileCdnUrl).then((reachable) => {
-      if (cancelled || !reachable || !globeRef.current) return;
-
-      const manager = new TileManager(tileCdnUrl);
-      tileManagerRef.current = manager;
-
-      // Get the globe mesh's material to create tile composite shader
-      const globeMesh = globeRef.current.globeMaterial?.();
-      if (globeMesh?.map) {
-        const tileMat = createTileCompositeMaterial(globeMesh.map);
-        tileMaterialRef.current = tileMat;
-        globeRef.current.globeMaterial(tileMat);
-      }
-
-      // Set up tile loaded callback
-      manager.onTileLoaded = (key, texture, tile) => {
-        const mat = tileMaterialRef.current;
-        if (!mat) return;
-        const slot = findAvailableSlot(mat);
-        const zl = manager['manifest']?.zoomLevels.find(
-          (z: { z: number }) => z.z === tile.z,
-        );
-        if (!zl) return;
-        const bounds = tileToLatLngBounds(tile.z, tile.x, tile.y, zl.cols, zl.rows);
-        updateTileOverlay(mat, slot, texture, bounds, 0);
-        mat.__tileSlots[slot] = {
-          key,
-          alpha: 0,
-          startTime: performance.now(),
-        };
-
-        // Notify loading state
-        onTilesLoading?.(manager.activeLoadCount > 0);
-      };
-
-      manager.init();
-    });
-
-    return () => {
-      cancelled = true;
-      tileManagerRef.current?.dispose();
-      tileManagerRef.current = null;
-      tileMaterialRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tileCdnUrl, isGlobeReady]);
-
-
-  // ── Tile render loop (throttled) ────────────────────────────────
-  useFrame(() => {
-    const manager = tileManagerRef.current;
-    const mat = tileMaterialRef.current;
-
-    if (mat) {
-      animateTileFadeIn(mat, TILE_FADE_DURATION);
-    }
-
-    if (!manager) return;
-
-    const now = performance.now();
-    if (now - lastTileCheckRef.current < TILE_CHECK_INTERVAL) return;
-    lastTileCheckRef.current = now;
-
-    const dist = camera.position.length();
-    if (dist > TILE_ZOOM_THRESHOLD_Z1) return;
-
-    // Compute center lat/lng from camera position
-    const dir = camera.position.clone().normalize();
-    const lat = Math.asin(dir.y) * (180 / Math.PI);
-    const lng = Math.atan2(dir.x, dir.z) * (180 / Math.PI);
-
-    manager.requestTiles(lat, lng, dist);
-  });
 
   // ── Zoom-based scaling for ALL markers (per-frame) ──────────────────
   useFrame(() => {

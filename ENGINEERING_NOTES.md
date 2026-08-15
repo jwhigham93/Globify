@@ -21,7 +21,7 @@ WebGL by building something worth looking at.
 
 | Layer | Tech |
 |---|---|
-| Frontend | Expo 54 (React Native + web), Three.js via `react-three-fiber`, custom GLSL tile shader |
+| Frontend | Expo 54 (React Native + web), Three.js via `react-three-fiber` |
 | Backend | Go 1.26, chi, pgx, sqlc |
 | Database | Postgres (Neon, serverless) |
 | Infra | AWS CDK v2 (Go), 3 deployment profiles behind one context flag |
@@ -316,9 +316,8 @@ There's no offline/mock mode anymore; the API must be running.
 
 ## Why not MapLibre?
 
-The globe is hand-built — Three.js, a custom GLSL tile shader — to learn
-what's actually happening under something like Mapbox, not to ship the
-fastest product.
+The globe is hand-built on raw Three.js to learn what's actually happening
+under something like Mapbox, not to ship the fastest product.
 
 **Bottom line:** having built it, real respect for MapLibre GL, a
 C++-to-WASM renderer with years of tiling, labeling, and zoom work already
@@ -356,7 +355,6 @@ needs a NAT.
 
 | File | What it does |
 |---|---|
-| `apps/Globify/src/components/Globe/tileShader.ts` | Custom GLSL shader, up to 8 composited tile overlays |
 | `services/supply-chain-api/cmd/server/main.go:89-112` | Picks the WebSocket hub implementation |
 | `services/supply-chain-api/internal/wshub/hub.go` | Ultra-lite hub: API Gateway + DynamoDB |
 | `services/supply-chain-api/internal/ws/hub.go` | Full/lite hub: in-process gorilla-websocket |

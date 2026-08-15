@@ -481,7 +481,6 @@ export const GlobeVisualization: React.FC<GlobeVisualizationProps> = ({
               onZoomChange={setCameraDistance}
               zoomTarget={zoomTarget}
               onZoomTargetReached={handleZoomTargetReached}
-              tileCdnUrl={config.resolvedTileCdnUrl}
               vehiclePositions={isolatedVehiclePositions}
               showTrucks={showTrucks}
               onTruckClick={handleTruckClick}

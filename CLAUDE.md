@@ -39,7 +39,7 @@ services/
 infra/
   cdk/              AWS CDK v2 in Go — three deployment profiles
 openspec/           Feature specs (proposal → design → tasks → archive)
-tools/scripts/      NASA tile processing, S3 sync, local tile server
+tools/scripts/      Build/EAS helper scripts
 ```
 
 ## Package manager
@@ -72,7 +72,7 @@ cdk deploy --all -c profile=ultra-lite
 ### Frontend — `apps/Globify`
 
 - **React Native + Expo 54** targeting iOS, Android, and web
-- **3D globe**: Three.js via `react-three-fiber` with custom GLSL tile shader (`tileShader.ts`)
+- **3D globe**: Three.js via `react-three-fiber`
 - **Globe components** live in `src/components/Globe/` — `GlobeScene.tsx` is the root, `GlobeVisualization.tsx` orchestrates layers
 - **Services** in `src/services/` are pure TS — no React — and each has a `.spec.ts` alongside it
 - **Auth**: AWS Cognito via `AuthProvider.tsx`; token is injected into `apiClient.ts` via `setTokenGetter`
@@ -129,7 +129,6 @@ Three deployment profiles selectable with `-c profile=<name>`:
 
 - **WSL2** on Windows — line endings are normalized to LF via `.gitattributes`
 - Local dev uses Docker Compose for Postgres (`services/supply-chain-api/docker-compose.yml`)
-- Tile assets served locally via `tools/scripts/serve-tiles-local.mjs`
 
 ## Feature workflow (OpenSpec)
 
