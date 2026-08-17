@@ -47,6 +47,20 @@
       }
     }
   ],
-  "targetDefaults": { "test": { "dependsOn": ["^build"] } },
+  "targetDefaults": {
+    "test": { "dependsOn": ["^build"] },
+    "export": {
+      "inputs": [
+        "production",
+        "^production",
+        { "env": "EXPO_PUBLIC_API_BASE_URL" },
+        { "env": "EXPO_PUBLIC_COGNITO_USER_POOL_ID" },
+        { "env": "EXPO_PUBLIC_COGNITO_CLIENT_ID" },
+        { "env": "EXPO_PUBLIC_COGNITO_REGION" },
+        { "env": "EXPO_PUBLIC_COGNITO_DOMAIN" },
+        { "env": "EXPO_PUBLIC_WS_URL" }
+      ]
+    }
+  },
   "nxCloudId": "698b817f6daf020971c31743"
 }
