@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@expo/metro-config": "~54.0.12",
+    "@jw-dev/globify-services": "workspace:*",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-three/fiber": "^9.6.1",
     "@tanstack/react-query": "^5.101.2",
@@ -37,7 +38,7 @@
     "react-native-svg": "*",
     "react-native-svg-transformer": "*",
     "react-native-web": "*",
-    "three": "^0.184.0",
+    "three": "^0.185.1",
     "three-globe": "^2.45.2"
   },
   "devDependencies": {

@@ -6,7 +6,7 @@
  * current would be misleading, so consumers gate on isSuccess instead.
  */
 import { useQuery } from '@tanstack/react-query';
-import * as apiClient from '../../services/apiClient';
+import * as apiClient from '@jw-dev/globify-services';
 import { useAuth } from '../../app/AuthProvider';
 import type { DisruptionMetrics } from '../../components/Globe/types';
 

@@ -4,7 +4,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { TruckDetailPanel } from './TruckDetailPanel';
-import type { VehiclePosition } from '../../services/useVehiclePositions';
+import type { VehiclePosition } from '@jw-dev/globify-services';
 
 const mockVehicle: VehiclePosition = {
   vehicleId: 'truck-001',

@@ -36,9 +36,11 @@ import {
   ROUTE_PATH_DASH_GAP,
   ROUTE_PATH_ANIMATE_TIME,
 } from './constants';
-import type { VehiclePosition } from '../../services/useVehiclePositions';
-import { buildAltitudeMap } from '../../services/collisionDetection';
-import { resolveClickTarget } from '../../services/resolveGlobeClick';
+import {
+  type VehiclePosition,
+  buildAltitudeMap,
+  resolveClickTarget,
+} from '@jw-dev/globify-services';
 import { StarryBackground } from './StarryBackground';
 import { Controls } from './Controls';
 import { TruckLayer } from './TruckLayer';

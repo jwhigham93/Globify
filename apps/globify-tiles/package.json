@@ -1,0 +1,47 @@
+{
+  "name": "@jw-dev/globify-tiles",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "eas-build-post-install": "cd ../../ && node tools/scripts/eas-build-post-install.mjs . apps/globify-tiles"
+  },
+  "nx": {
+    "name": "globify-tiles"
+  },
+  "dependencies": {
+    "3d-tiles-renderer": "^0.5.1",
+    "@expo/metro-config": "*",
+    "@jw-dev/globify-services": "workspace:*",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "@react-three/postprocessing": "^3.0.5",
+    "@takram/three-atmosphere": "^0.19.1",
+    "@takram/three-clouds": "^0.7.6",
+    "@takram/three-geospatial": "^0.9.1",
+    "@takram/three-geospatial-effects": "^0.6.4",
+    "@tanstack/react-query": "^5.101.2",
+    "@testing-library/react-native": "*",
+    "expo": "*",
+    "expo-asset": "~12.0.13",
+    "expo-constants": "*",
+    "expo-file-system": "~19.0.23",
+    "expo-gl": "~16.0.10",
+    "expo-splash-screen": "*",
+    "expo-status-bar": "*",
+    "expo-system-ui": "*",
+    "jest-expo": "*",
+    "metro-config": "*",
+    "metro-resolver": "*",
+    "postprocessing": "^6.39.4",
+    "react": "*",
+    "react-dom": "*",
+    "react-native": "*",
+    "react-native-svg": "*",
+    "react-native-svg-transformer": "*",
+    "react-native-web": "*",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "react-test-renderer": "*"
+  }
+}

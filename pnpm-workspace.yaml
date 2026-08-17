@@ -1,5 +1,6 @@
 packages:
   - "apps/*"
+  - "libs/*"
 
 allowBuilds:
   "@swc/core": true
@@ -9,9 +10,21 @@ allowBuilds:
   detox: false
   dtrace-provider: false
 
+# @react-three/postprocessing@3.0.5 (added for apps/globify-tiles) requires
+# react ^19.2.0, above the workspace's prior 19.1.0 pin. Force a single React
+# instance across every project the same way jest is forced below — a
+# per-app pin isn't enough on its own (pnpm's peer-hashed store can still
+# resolve react-test-renderer against a different physical react instance
+# than the one an app's own import resolves, producing "Invalid hook call" /
+# null-dispatcher errors even when the semver matches) — this eliminates
+# that dual-instance conflict for the whole workspace instead.
+overrides:
+  react: "19.2.8"
+  react-dom: "19.2.8"
+  react-test-renderer: "19.2.8"
+
 # @nx/jest@22.7.5 ships jest 30 internally; jest-expo@54 requires jest 29.
 # Force everything to jest 29 to eliminate the dual-version conflict.
-overrides:
   jest: "29.7.0"
   jest-runtime: "29.7.0"
   jest-circus: "29.7.0"

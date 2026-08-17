@@ -36,5 +36,10 @@
     "**/*.jsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../../libs/globify-services/tsconfig.lib.json"
+    }
   ]
 }

@@ -10,9 +10,8 @@ import {
 } from 'react-native';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { GlobeVisualization } from '../components/Globe/GlobeVisualization';
-import { transformToArcs, transformToDataPoints } from '../services/supplyChainData';
+import { transformToArcs, transformToDataPoints, setTokenGetter } from '@jw-dev/globify-services';
 import { DEFAULT_BACKGROUND_COLOR } from '../components/Globe';
-import { setTokenGetter } from '../services/apiClient';
 import { queryClient } from '../hooks/queries/queryClient';
 import { useSupplyChainData } from '../hooks/queries/useSupplyChainData';
 import { AuthProvider, useAuth } from './AuthProvider';

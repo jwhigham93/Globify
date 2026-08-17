@@ -32,9 +32,11 @@ import {
   smoothLongitude,
   snapToTarget,
   type CarMesh,
-} from '../../services/carModel';
-import { getTruckColor, computePulseScale, type GpsStatus } from '../../services/truckVisuals';
-import type { VehiclePosition } from '../../services/useVehiclePositions';
+  getTruckColor,
+  computePulseScale,
+  type GpsStatus,
+  type VehiclePosition,
+} from '@jw-dev/globify-services';
 import {
   TRUCK_MARKER_ALTITUDE,
   TRUCK_HEADING_SMOOTH_K,

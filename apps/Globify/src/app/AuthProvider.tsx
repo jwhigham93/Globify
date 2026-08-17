@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import * as authService from '../services/authService';
-import { setTokenGetter } from '../services/apiClient';
-import { config } from '../services/config';
+import * as authService from '@jw-dev/globify-services';
+import { setTokenGetter, config } from '@jw-dev/globify-services';
 import { queryClient } from '../hooks/queries/queryClient';
 
 interface AuthContextValue {

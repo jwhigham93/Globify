@@ -7,8 +7,11 @@ import { color, space, type, surface } from '../ui/theme';
 import { useHudLayout } from '../ui/layout';
 import { ShapeCell } from '../ui/Shape';
 import { CloseButton } from '../ui/CloseButton';
-import type { VehiclePosition } from '../../services/useVehiclePositions';
-import { computeTripStatus, formatTravelTime } from '../../services/truckStatus';
+import {
+  type VehiclePosition,
+  computeTripStatus,
+  formatTravelTime,
+} from '@jw-dev/globify-services';
 import {
   TRUCK_COLOR_LIVE,
   TRUCK_COLOR_STALE,

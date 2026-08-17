@@ -88,8 +88,10 @@ jest.mock('three/examples/jsm/controls/OrbitControls.js', () => ({
   })),
 }));
 
-// Mock useVehiclePositions hook
-jest.mock('../../services/useVehiclePositions', () => ({
+// Mock useVehiclePositions from the shared services package, passing every
+// other export through untouched.
+jest.mock('@jw-dev/globify-services', () => ({
+  ...jest.requireActual('@jw-dev/globify-services'),
   useVehiclePositions: () => ({ positions: new Map(), connected: false }),
 }));
 

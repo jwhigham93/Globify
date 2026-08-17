@@ -29,7 +29,7 @@ import type {
   NetworkRiskMetrics,
   DisruptionMetrics,
 } from './types';
-import type { VehiclePosition } from '../../services/useVehiclePositions';
+import type { VehiclePosition } from '@jw-dev/globify-services';
 
 /** Room reserved on the left for the spin toggle, so the column can't reach it. */
 const LEFT_RESERVED = 44;

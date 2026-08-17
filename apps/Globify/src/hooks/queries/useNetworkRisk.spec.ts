@@ -6,9 +6,9 @@ import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useNetworkRisk } from './useNetworkRisk';
-import * as apiClient from '../../services/apiClient';
+import * as apiClient from '@jw-dev/globify-services';
 
-jest.mock('../../services/apiClient');
+jest.mock('@jw-dev/globify-services');
 
 // Auth state is controlled per-test via this mutable flag.
 let mockAuthenticated = true;

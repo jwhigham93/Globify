@@ -3,7 +3,7 @@
  * never retried; other failures retry at most twice.
  */
 import { queryClient } from './queryClient';
-import { ApiError } from '../../services/apiClient';
+import { ApiError } from '@jw-dev/globify-services';
 
 const retry = queryClient.getDefaultOptions().queries?.retry as (
   failureCount: number,

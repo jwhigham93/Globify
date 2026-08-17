@@ -18,7 +18,9 @@
     {
       "plugin": "@nx/js/typescript",
       "options": {
-        "typecheck": { "targetName": "typecheck" },
+        "typecheck": {
+          "targetName": "typecheck"
+        },
         "build": {
           "targetName": "build",
           "configName": "tsconfig.lib.json",
@@ -27,9 +29,24 @@
         }
       }
     },
-    { "plugin": "@nx/eslint/plugin", "options": { "targetName": "lint" } },
-    { "plugin": "@nx/jest/plugin", "options": { "targetName": "test" } },
-    { "plugin": "@nx/playwright/plugin", "options": { "targetName": "e2e" } },
+    {
+      "plugin": "@nx/eslint/plugin",
+      "options": {
+        "targetName": "lint"
+      }
+    },
+    {
+      "plugin": "@nx/jest/plugin",
+      "options": {
+        "targetName": "test"
+      }
+    },
+    {
+      "plugin": "@nx/playwright/plugin",
+      "options": {
+        "targetName": "e2e"
+      }
+    },
     {
       "plugin": "@nx/expo/plugin",
       "options": {
@@ -47,6 +64,11 @@
       }
     }
   ],
-  "targetDefaults": { "test": { "dependsOn": ["^build"] } },
-  "nxCloudId": "698b817f6daf020971c31743"
+  "targetDefaults": {
+    "test": {
+      "dependsOn": ["^build"]
+    }
+  },
+  "nxCloudId": "698b817f6daf020971c31743",
+  "analytics": false
 }

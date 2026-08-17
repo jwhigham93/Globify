@@ -15,7 +15,7 @@ import { GlobeHud } from './GlobeHud';
 import type { GlobeHudProps } from './GlobeHud';
 import { HudContext } from '../ui/layout';
 import type { HudState } from '../ui/layout';
-import type { VehiclePosition } from '../../services/useVehiclePositions';
+import type { VehiclePosition } from '@jw-dev/globify-services';
 
 jest.mock('../../hooks/queries/useSupplyChainData', () => ({
   useSupplyChainData: () => ({ locationsById: new Map() }),

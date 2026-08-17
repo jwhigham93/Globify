@@ -8,6 +8,12 @@
     },
     {
       "path": "./apps/Globify"
+    },
+    {
+      "path": "./apps/globify-tiles"
+    },
+    {
+      "path": "./libs/globify-services"
     }
   ]
 }
