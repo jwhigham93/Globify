@@ -12,6 +12,26 @@ import (
 	"github.com/jwhig/jw-dev/services/supply-chain-api/internal/wsapigw"
 )
 
+// writeWsProxyResponse writes the response shape API Gateway's WebSocket
+// $connect/$disconnect routes require from a Lambda proxy integration: a body
+// of exactly {"statusCode": N}. Lambda Web Adapter's generic (non-HTTP) event
+// pass-through — the path every one of these handlers is reached through in
+// production (see HandleLambdaEvents doc comment) — forwards the local HTTP
+// response body verbatim as the Lambda function's raw return value; it does
+// not synthesize a proxy-response wrapper from the local status code the way
+// it does for recognized HTTP-shaped triggers. Without this exact body shape,
+// API Gateway can't tell whether to accept or reject the connection and just
+// terminates it — a plain w.WriteHeader(200) with an empty body, or
+// http.Error's {"error": "..."} body, both fail this silently: the app's own
+// access logs show a clean 200/4xx while the browser sees nothing but a
+// generic "WebSocket connection failed", regardless of which status this
+// handler actually intended.
+func writeWsProxyResponse(w http.ResponseWriter, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(map[string]int{"statusCode": statusCode})
+}
+
 // HandleWsConnect processes API Gateway $connect events forwarded by Lambda
 // Web Adapter as POST /_ws/connect. It validates the single-use WS ticket
 // then stores the connection ID in DynamoDB so Broadcast can reach it.
@@ -19,25 +39,25 @@ func HandleWsConnect(pool *pgxpool.Pool, hub *wsapigw.Hub, authEnabled bool) htt
 	return func(w http.ResponseWriter, r *http.Request) {
 		connectionID := r.Header.Get("x-connection-id")
 		if connectionID == "" {
-			http.Error(w, `{"error":"missing connection ID"}`, http.StatusBadRequest)
+			writeWsProxyResponse(w, http.StatusBadRequest)
 			return
 		}
 
 		if authEnabled {
 			ticket := r.URL.Query().Get("ticket")
 			if _, err := auth.RedeemWSTicket(r.Context(), pool, ticket); err != nil {
-				http.Error(w, `{"error":"invalid or expired ticket"}`, http.StatusUnauthorized)
+				writeWsProxyResponse(w, http.StatusUnauthorized)
 				return
 			}
 		}
 
 		if err := hub.Connect(r.Context(), connectionID); err != nil {
 			log.Error().Err(err).Str("connectionId", connectionID).Msg("ws: failed to store connection")
-			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+			writeWsProxyResponse(w, http.StatusInternalServerError)
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
+		writeWsProxyResponse(w, http.StatusOK)
 	}
 }
 
@@ -52,7 +72,7 @@ func HandleWsConnect(pool *pgxpool.Pool, hub *wsapigw.Hub, authEnabled bool) htt
 func HandleWsDisconnect(hub *wsapigw.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-event-type") != "DISCONNECT" {
-			http.Error(w, `{"error":"invalid event"}`, http.StatusBadRequest)
+			writeWsProxyResponse(w, http.StatusBadRequest)
 			return
 		}
 		if connectionID := r.Header.Get("x-connection-id"); connectionID != "" {
@@ -60,7 +80,7 @@ func HandleWsDisconnect(hub *wsapigw.Hub) http.HandlerFunc {
 				log.Debug().Err(err).Str("connectionId", connectionID).Msg("ws: disconnect cleanup failed")
 			}
 		}
-		w.WriteHeader(http.StatusOK)
+		writeWsProxyResponse(w, http.StatusOK)
 	}
 }
 
@@ -68,7 +88,7 @@ func HandleWsDisconnect(hub *wsapigw.Hub) http.HandlerFunc {
 // (POST /_ws/default). Client-to-server messages are not used in this protocol.
 func HandleWsDefault() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		writeWsProxyResponse(w, http.StatusOK)
 	}
 }
 
@@ -148,34 +168,34 @@ func HandleLambdaEvents(pool *pgxpool.Pool, hub *wsapigw.Hub, authEnabled bool, 
 			// Fix #6: require API Gateway's eventType field to match; a public HTTP
 			// POST can craft routeKey but is unlikely to know this field is checked.
 			if event.RequestContext.EventType != "CONNECT" {
-				http.Error(w, `{"error":"invalid event"}`, http.StatusBadRequest)
+				writeWsProxyResponse(w, http.StatusBadRequest)
 				return
 			}
 			if connectionID == "" {
-				http.Error(w, `{"error":"missing connection ID"}`, http.StatusBadRequest)
+				writeWsProxyResponse(w, http.StatusBadRequest)
 				return
 			}
 			if authEnabled {
 				ticket := event.QueryStringParameters["ticket"]
 				if _, err := auth.RedeemWSTicket(r.Context(), pool, ticket); err != nil {
 					log.Warn().Err(err).Msg("ws: $connect rejected — invalid ticket")
-					http.Error(w, `{"error":"invalid or expired ticket"}`, http.StatusUnauthorized)
+					writeWsProxyResponse(w, http.StatusUnauthorized)
 					return
 				}
 			}
 			if err := hub.Connect(r.Context(), connectionID); err != nil {
 				log.Error().Err(err).Str("connectionId", connectionID).Msg("ws: failed to store connection")
-				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+				writeWsProxyResponse(w, http.StatusInternalServerError)
 				return
 			}
-			w.WriteHeader(http.StatusOK)
+			writeWsProxyResponse(w, http.StatusOK)
 
 		case "$disconnect":
 			// Require the eventType field to match, same as $connect (Fix #6): a
 			// public HTTP POST can craft routeKey but not the API Gateway-set
 			// eventType, so a crafted request cannot drop a known connection.
 			if event.RequestContext.EventType != "DISCONNECT" {
-				http.Error(w, `{"error":"invalid event"}`, http.StatusBadRequest)
+				writeWsProxyResponse(w, http.StatusBadRequest)
 				return
 			}
 			if connectionID != "" {
@@ -183,10 +203,10 @@ func HandleLambdaEvents(pool *pgxpool.Pool, hub *wsapigw.Hub, authEnabled bool, 
 					log.Debug().Err(err).Str("connectionId", connectionID).Msg("ws: disconnect cleanup failed")
 				}
 			}
-			w.WriteHeader(http.StatusOK)
+			writeWsProxyResponse(w, http.StatusOK)
 
 		default:
-			w.WriteHeader(http.StatusOK)
+			writeWsProxyResponse(w, http.StatusOK)
 		}
 	}
 }
