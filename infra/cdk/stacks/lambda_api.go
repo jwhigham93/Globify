@@ -173,12 +173,20 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 	// ── API Gateway WebSocket API (GPS streaming) ────────────────────────
 	// All three routes ($connect, $disconnect, $default) invoke the same Lambda.
 	// LWA maps them to POST /_ws/connect, /_ws/disconnect, /_ws/default.
+	//
+	// Construct IDs carry a "V2" suffix: the underlying API and stage were
+	// deleted out-of-band, so CloudFormation's stack state no longer matched
+	// reality — a plain `cdk deploy` sees no property diff and won't recreate
+	// a resource it still believes exists. API Gateway always mints a new API
+	// ID on creation, so the old one can't be reused; bumping the logical ID
+	// forces CFN to create a fresh resource instead of trusting stale state.
+	// Do not rename back to the original IDs.
 	wsIntegration := awsapigatewayv2integrations.NewWebSocketLambdaIntegration(
 		jsii.String("WsLambdaIntegration"),
 		fn,
 		nil,
 	)
-	wsApi := awsapigatewayv2.NewWebSocketApi(stack, jsii.String("SupplyChainWsApi"), &awsapigatewayv2.WebSocketApiProps{
+	wsApi := awsapigatewayv2.NewWebSocketApi(stack, jsii.String("SupplyChainWsApiV2"), &awsapigatewayv2.WebSocketApiProps{
 		ApiName: jsii.String("supply-chain-ws"),
 		ConnectRouteOptions: &awsapigatewayv2.WebSocketRouteOptions{
 			Integration: wsIntegration,
@@ -191,7 +199,7 @@ func NewLambdaApiStack(scope constructs.Construct, id string, props *LambdaApiSt
 		},
 	})
 
-	wsStage := awsapigatewayv2.NewWebSocketStage(stack, jsii.String("WsApiProdStage"), &awsapigatewayv2.WebSocketStageProps{
+	wsStage := awsapigatewayv2.NewWebSocketStage(stack, jsii.String("WsApiProdStageV2"), &awsapigatewayv2.WebSocketStageProps{
 		WebSocketApi: wsApi,
 		StageName:    jsii.String("production"),
 		AutoDeploy:   jsii.Bool(true),
