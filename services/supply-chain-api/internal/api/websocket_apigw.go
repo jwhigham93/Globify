@@ -129,6 +129,26 @@ func HandleLambdaEvents(pool *pgxpool.Pool, hub *wsapigw.Hub, authEnabled bool, 
 				return
 			}
 			log.Debug().Str("detailType", event.DetailType).Msg("gps-sim: trigger received")
+
+			// Skip the simulator (and the Postgres round-trip it does) when
+			// nobody is connected. EventBridge ticks every 2 minutes whether
+			// or not anyone has the app open; without this check, that cadence
+			// keeps writing to Neon and its compute endpoint never gets a
+			// chance to autosuspend, so it runs (and bills) 24/7 even when
+			// idle. On a DynamoDB error we fail open and run the simulator
+			// anyway, so a transient lookup failure doesn't stall live data
+			// for a connected client.
+			active, err := hub.HasActiveConnections(r.Context())
+			if err != nil {
+				log.Warn().Err(err).Msg("gps-sim: connection check failed, running anyway")
+				active = true
+			}
+			if !active {
+				log.Debug().Msg("gps-sim: skipped — no active connections")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
 			RunGPSSimulator(r.Context(), pool, hub)
 			w.WriteHeader(http.StatusOK)
 			return

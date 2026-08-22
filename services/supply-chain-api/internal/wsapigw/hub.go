@@ -58,6 +58,27 @@ func (h *Hub) Disconnect(ctx context.Context, connectionID string) error {
 	return err
 }
 
+// HasActiveConnections reports whether the connections table currently holds
+// at least one item. Used to skip GPS-simulator DB work entirely when nobody
+// is connected — see gps_simulator.go's doc comment for why that matters for
+// Neon compute-hour cost (an idle Postgres endpoint autosuspends only if
+// nothing queries it).
+//
+// A Scan with Select=COUNT and Limit=1 reads at most one item to answer this,
+// rather than the full-table Scan Broadcast does when it actually needs every
+// connection ID.
+func (h *Hub) HasActiveConnections(ctx context.Context) (bool, error) {
+	out, err := h.ddb.Scan(ctx, &dynamodb.ScanInput{
+		TableName: aws.String(h.table),
+		Select:    types.SelectCount,
+		Limit:     aws.Int32(1),
+	})
+	if err != nil {
+		return false, err
+	}
+	return out.Count > 0, nil
+}
+
 // Broadcast implements api.WSBroadcaster: marshals a typed envelope and sends
 // it to all active connections, removing stale ones (410 GoneException).
 func (h *Hub) Broadcast(msgType string, data interface{}) {
