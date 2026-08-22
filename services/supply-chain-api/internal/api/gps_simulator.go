@@ -80,6 +80,12 @@ type latLng struct {
 // RunGPSSimulator generates a small GPS movement for every active vehicle,
 // persists the new ping, and broadcasts a position_update per vehicle so
 // WebSocket clients receive real-time movement without a separate data source.
+//
+// The EventBridge-driven caller (websocket_apigw.go's HandleLambdaEvents)
+// skips calling this entirely when wsapigw.Hub reports no active
+// connections, so an idle app doesn't keep writing to Postgres every tick —
+// that matters for Neon, whose compute endpoint only autosuspends (and stops
+// billing) once nothing has queried it for a while.
 func RunGPSSimulator(ctx context.Context, pool *pgxpool.Pool, hub WSBroadcaster) {
 	rows, err := pool.Query(ctx, `
 		SELECT DISTINCT ON (gp.vehicle_id)
